@@ -1,0 +1,5 @@
+:host { display: inline-flex; }
+.plate-s { width: 152rpx; height: 112rpx; font-size: 64rpx; }
+.plate-m { min-width: 104rpx; height: 64rpx; padding: 0 12rpx; font-size: 34rpx; border-width: 4rpx; border-radius: 14rpx; }
+.plate-l { width: 100%; height: 360rpx; font-size: 260rpx; border-width: 10rpx; border-radius: 40rpx; }
+.unit { font-size: .3em; margin-left: .12em; align-self: flex-end; margin-bottom: .55em; }

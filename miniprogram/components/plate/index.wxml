@@ -1,0 +1,3 @@
+<view class="plate plate-{{color}} plate-{{size}}" aria-label="{{cc}}cc">
+  <text>{{cc}}</text><text wx:if="{{unit}}" class="unit">cc</text>
+</view>

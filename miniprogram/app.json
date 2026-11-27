@@ -1,0 +1,63 @@
+{
+  "pages": [
+    "pages/home/index",
+    "pages/bike/list",
+    "pages/bike/detail",
+    "pages/activity/list",
+    "pages/activity/detail",
+    "pages/mine/index",
+    "pages/mine/favorites",
+    "pages/mine/signups",
+    "pages/login/index",
+    "pages/chat/index"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#ffffff",
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "XX 摩托",
+    "backgroundColor": "#f4f4f2",
+    "backgroundTextStyle": "dark",
+    "backgroundColorTop": "#ffffff",
+    "backgroundColorBottom": "#ffffff"
+  },
+  "tabBar": {
+    "color": "#5a5a57",
+    "selectedColor": "#000000",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "black",
+    "list": [
+      {
+        "pagePath": "pages/home/index",
+        "text": "首页",
+        "iconPath": "assets/tab/house-bold.png",
+        "selectedIconPath": "assets/tab/house-fill.png"
+      },
+      {
+        "pagePath": "pages/bike/list",
+        "text": "车型",
+        "iconPath": "assets/tab/motorcycle-bold.png",
+        "selectedIconPath": "assets/tab/motorcycle-fill.png"
+      },
+      {
+        "pagePath": "pages/activity/list",
+        "text": "活动",
+        "iconPath": "assets/tab/flag-checkered-bold.png",
+        "selectedIconPath": "assets/tab/flag-checkered-fill.png"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的",
+        "iconPath": "assets/tab/user-bold.png",
+        "selectedIconPath": "assets/tab/user-fill.png"
+      }
+    ]
+  },
+  "usingComponents": {
+    "bike-card": "/components/bike-card/index",
+    "empty": "/components/empty/index",
+    "plate": "/components/plate/index"
+  },
+  "style": "v2",
+  "sitemapLocation": "sitemap.json",
+  "lazyCodeLoading": "requiredComponents"
+}
