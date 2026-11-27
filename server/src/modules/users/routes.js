@@ -192,6 +192,7 @@ function register(router) {
         id: s.id,
         signupNo: s.signup_no,
         status: s.status,
+        // operator 只看脱敏手机号；完整号码仅 super_admin（activity:export）
         phone: phoneView(ctx, s.phone),
         remark: s.remark,
         createdAt: s.created_at,
