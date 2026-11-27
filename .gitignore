@@ -1,0 +1,29 @@
+# dependencies
+node_modules/
+
+# local database & generated runtime files
+server/data/
+*.db
+*.db-shm
+*.db-wal
+
+# secrets
+.env
+
+# logs
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# test & coverage
+coverage/
+
+# temporary files
+tmp/
+.tmp-edge-profile/
+.dsh-office-*/
+reports/.deck_tmp/
