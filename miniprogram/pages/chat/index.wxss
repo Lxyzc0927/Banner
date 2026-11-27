@@ -1,0 +1,29 @@
+.chat { height: 100vh; display: flex; flex-direction: column; background: var(--paper); }
+.msgs { flex: 1; height: 0; padding-top: 16rpx; }
+.msgs-bottom { height: 24rpx; }
+
+.msg { display: flex; flex-direction: column; align-items: flex-start; padding: 12rpx 32rpx; }
+.msg.user { align-items: flex-end; }
+
+.bubble { max-width: 80%; padding: 20rpx 26rpx; border-radius: 8rpx 28rpx 28rpx 28rpx; background: var(--paper-2); font-size: 30rpx; line-height: 1.6; word-break: break-all; }
+.msg.user .bubble { border-radius: 28rpx 8rpx 28rpx 28rpx; background: var(--ink); color: var(--paper); }
+.bubble.pending { color: var(--ink-2); }
+.bubble.failed { border: 2rpx solid var(--red); background: var(--paper); }
+
+.recs { width: 88%; margin-top: 12rpx; border-top: 2rpx solid var(--ink); }
+.rec { display: flex; align-items: center; gap: 20rpx; min-height: 112rpx; border-bottom: 1px solid var(--line); }
+.rec.pressed { background: var(--paper-2); }
+.rec-name { flex: 1; min-width: 0; font-size: 30rpx; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.rec-price { font-size: 34rpx; flex-shrink: 0; }
+.yen { font-size: 24rpx; font-weight: 600; margin-right: 2rpx; }
+.retry { display: flex; align-items: center; min-height: 88rpx; font-size: 26rpx; font-weight: 600; color: var(--red); text-decoration: underline; }
+
+.quick { display: flex; white-space: nowrap; padding: 12rpx 32rpx; border-top: 1px solid var(--line); }
+.quick-item { display: inline-flex; align-items: center; flex-shrink: 0; height: 88rpx; padding: 0 28rpx; margin-right: 16rpx; border: 2rpx solid var(--ink); border-radius: 44rpx; box-sizing: border-box; font-size: 26rpx; }
+.quick-item.pressed { background: var(--paper-2); }
+
+.bar { display: flex; align-items: center; gap: 16rpx; padding: 12rpx 32rpx; background: var(--paper); }
+.input { flex: 1; height: 88rpx; padding: 0 28rpx; border-radius: 44rpx; background: var(--paper-2); font-size: 30rpx; }
+.ph { color: var(--ink-2); }
+button.send { display: flex; align-items: center; justify-content: center; width: 88rpx; height: 88rpx; margin: 0; padding: 0; border-radius: 50%; background: var(--ink); flex-shrink: 0; }
+button.send[disabled] { background: var(--line) !important; }

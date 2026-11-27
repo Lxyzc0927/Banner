@@ -46,6 +46,8 @@ reports/                       # 统计报告、AI 解读、截图、答辩 PPT 
 - [`docs/05-分析口径.md`](docs/05-分析口径.md)
 - [`docs/06-AI解读.md`](docs/06-AI解读.md)
 - [`docs/07-Git分支与合并.md`](docs/07-Git分支与合并.md)
+- [`docs/12-前后端数据对接.md`](docs/12-前后端数据对接.md)
+- [`docs/13-接口文档修正清单.md`](docs/13-接口文档修正清单.md)
 - [`docs/11-交付物清单.md`](docs/11-交付物清单.md)
 
 ## 和 C 的后端骨架怎么合并
@@ -53,14 +55,16 @@ reports/                       # 统计报告、AI 解读、截图、答辩 PPT 
 当前 `server/` 是一套可运行的参考骨架（HTTP 装配、SQLite、JWT、自动路由）。如果 C 已经搭了后端骨架：
 
 1. **保留 C 的** `server/src/app.js`、`server/src/db.js`、`server/src/http.js`、`server/package.json`。
-2. 把本模块的 `server/src/modules/{auth,users,admins,activities,analytics}/`、`server/sql/`、`server/src/scripts/` 接进去。
+2. 把本模块的 `server/src/modules/{auth,users,admins,activities,analytics,track}/`、`server/sql/`、`server/src/scripts/` 接进去。
 3. `app.js` 若没有自动路由，加一行注册 `modules/*/routes.js`；这是一次公共文件修改，单独提交并同步 C。
 4. 表结构以 C 的数据库为准；把 `schema.sql` 拆成新增表 / 字段迁移，不要 `DROP`。
 5. 合并后跑 `npm test` 和主链路：登录 → 活动 → 报名 → 统计 → 看板。
 
 如果 C 还没推骨架，可以直接以当前 `server/` 为初始后端，再让 C 补车型 / 内容 / 收藏 / 客服模块。
 
-## 上传到 `feature/lumenh26`
+## 在现有 `feature/lumenh26` 上修复（不新建分支）
+
+旧分支的问题不是代码内容，而是**缺少主线前端的历史**：它里面没有 `miniprogram/`、`admin/`，直接合 `main` 会被当成删除。修复方式是先把 main 的前端恢复到现有分支，再叠加 D 的后端。
 
 ### 方式 A：本机有 Git
 
@@ -68,46 +72,48 @@ reports/                       # 统计报告、AI 解读、截图、答辩 PPT 
 git fetch origin
 git switch feature/lumenh26
 
-# 只复制 D 的目录；不要覆盖团队 README 和 B 的顶层 admin/
-# 建议复制：server/、docs/、reports/、.env.example、.gitignore、package.json、README-D.md
+# 1. 从 main 恢复被删掉的前端目录（只恢复，不覆盖 D 的后端）
+git checkout origin/main -- miniprogram admin .impeccable DESIGN.md PRODUCT.md
 
-git status
+# 2. 如果旧提交里跟踪了数据库，先移出 Git（保留本地文件可加 --cached 去掉）
+git rm --cached server/data/app.db 2>/dev/null || true
+
+# 3. 把最新 D 的 server/、docs/、reports/ 覆盖进来
+#    不要动 miniprogram/、admin/、DESIGN.md、PRODUCT.md
 git add server docs reports .env.example .gitignore package.json README-D.md
-git commit -m "feat(d): 登录、用户、活动、报名、分析与 AI 解读"
-git push origin feature/lumenh26
 
-# 合并回 main（或让组长合并）
-git switch main
-git pull origin main
-git merge --no-ff feature/lumenh26 -m "merge: D 模块"
-npm test
-git push origin main
+git commit -m "fix(d): 恢复小程序/管理后台并同步 D 后端"
+git push origin feature/lumenh26
 ```
 
-> 如果 `main` 受保护，由组长合并；不要强推。合并前至少让一名组员看 `git diff --stat` 和 `npm test` 结果。
+推送前检查没有删除前端：
 
-### 方式 B：本机没有 Git，用 GitHub API 上传
+```bash
+git diff --name-status origin/main...HEAD | Select-String '^D\s+(miniprogram|admin)/'
+```
+
+没有输出才可以让组长合并 `feature/lumenh26`。
+
+### 方式 B：本机没有 Git，用 GitHub API 重置现有分支
 
 GitHub 已经不支持用账户密码直接 push，必须用 **Personal Access Token（PAT）**。不要把自己的 GitHub 密码发给别人。
 
-1. 打开 GitHub → Settings → Developer settings → Personal access tokens → **Tokens (classic)** → Generate new token (classic)。
-2. Note 填 `dsh-upload`，Expiration 选 7 天，勾选 **repo**。
-3. 生成后复制 `ghp_...`，只放在本机环境变量里：
-
 ```powershell
-cd "D:\文档\deepseek-harness\default-workspace\moto-sales-platform"
+cd "C:\Users\lh060\Desktop\moto-sales-platform"
 $env:GITHUB_TOKEN = "ghp_你的token"
-node tools/push_via_api.js --dry-run   # 先看会传哪些文件
-node tools/push_via_api.js             # 推送到 feature/lumenh26
+
+node tools/push_via_api.js --dry-run --reset --base main --branch feature/lumenh26
+node tools/push_via_api.js --reset --base main --branch feature/lumenh26
 ```
 
-脚本会：
+`--reset` 会：
 
-- 只新增/覆盖本模块文件，保留仓库已有的 `README.md`；
-- 不上传 `.env`、`server/data`、`node_modules`、临时目录；
-- 使用 GitHub Git Data API 创建 commit，不需要本机安装 Git；
-- 可选 `--merge-main` 尝试合并到 `main`（main 受保护时会失败，交给组长）。
+- 以 `main` 的 tree 为底，保留 `miniprogram/`、`admin/`、`DESIGN.md`、`PRODUCT.md`、`.impeccable/`；
+- 只叠加 D 的 `server/`、`docs/`、`reports/` 等文件；
+- 不上传 `.env`、`server/data`、`node_modules`、临时目录，**不会把 `app.db` 带进提交**；
+- 强制更新现有 `feature/lumenh26`，不新建分支、不直接动 `main`。
 
+> `--reset` 会重写 D 分支历史；推送前在群里说一声，确认没有别人基于旧 D 分支开发。
 > Token 等同于密码，不要提交到 Git、不要发到群里。上传完成后可以在 GitHub 设置里立即撤销。
 
 ## 说明
