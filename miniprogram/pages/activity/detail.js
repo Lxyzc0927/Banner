@@ -22,6 +22,7 @@ Page({
     error: '',
     sheet: false,
     form: { name: '' },
+    errors: { name: '', phone: '' },
     user: null,
     submitting: false
   },
@@ -34,7 +35,16 @@ Page({
 
   load() {
     return api.getActivity(this.id).then(activity => {
-      this.setData({ activity, percent: format.percent(activity.signup, activity.quota), button: buttonOf(activity), error: '' })
+      this.setData({
+        activity,
+        percent: format.percent(activity.signup, activity.quota),
+        button: buttonOf(activity),
+        // 号码牌在报名中、已报名时为黄色
+        open: activity.status !== '已结束' && (!activity.full || activity.signed),
+        parts: format.dateParts(activity.date),
+        left: Math.max(0, activity.quota - activity.signup),
+        error: ''
+      })
       return activity
     }, err => {
       this.setData({ error: err.msg || '加载失败' })
@@ -57,19 +67,26 @@ Page({
       .catch(() => {})
   },
 
-  closeSheet() { this.setData({ sheet: false }) },
+  closeSheet() { this.setData({ sheet: false, errors: { name: '', phone: '' } }) },
   noop() {},
-  onName(e) { this.setData({ 'form.name': e.detail.value }) },
+  onName(e) { this.setData({ 'form.name': e.detail.value, 'errors.name': '' }) },
 
   onPhone(e) {
-    auth.bindPhone(e.detail).then(user => this.setData({ user })).catch(() => {})
+    auth.bindPhone(e.detail).then(user => this.setData({ user, 'errors.phone': '' })).catch(() => {})
   },
 
   submit() {
     if (this.data.submitting) return
     const name = this.data.form.name.trim()
-    if (name.length < 2 || name.length > 20) return wx.showToast({ title: '请填写 2–20 个字的姓名', icon: 'none' })
-    if (!this.data.user || !this.data.user.phone) return wx.showToast({ title: '请先授权手机号', icon: 'none' })
+    // 错误写在对应字段下方，同时 toast 提示
+    const errors = {
+      name: name.length < 2 || name.length > 20 ? '请填写 2–20 个字的姓名' : '',
+      phone: !this.data.user || !this.data.user.phone ? '点上面的按钮授权手机号' : ''
+    }
+    if (errors.name || errors.phone) {
+      this.setData({ errors })
+      return wx.showToast({ title: errors.name || '请先授权手机号', icon: 'none' })
+    }
 
     this.setData({ submitting: true })
     api.signup(this.id, { name }).then(() => {

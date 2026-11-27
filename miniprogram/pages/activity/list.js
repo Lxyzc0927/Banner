@@ -15,8 +15,10 @@ function decorate(a) {
   return Object.assign({}, a, {
     percent: format.percent(a.signup, a.quota),
     stateText: ended ? '已结束' : a.full ? '名额已满' : a.signed ? '已报名' : '报名中',
-    stateClass: ended || a.full ? 'tag-gray' : a.signed ? 'tag-green' : ''
-  })
+    stateClass: ended ? 'state-ended' : a.full ? 'state-full' : a.signed ? 'state-signed' : 'state-open',
+    open: !ended && !a.full,
+    left: Math.max(0, a.quota - a.signup)
+  }, format.dateParts(a.date))
 }
 
 Page({

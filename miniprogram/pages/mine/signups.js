@@ -1,10 +1,11 @@
+const format = require('../../utils/format')
 const api = require('../../api/index')
 const auth = require('../../utils/auth')
 const session = require('../../utils/session')
 const list = require('../../utils/list')
 
 function decorate(s) {
-  return Object.assign({}, s, { createdText: s.createdAt.slice(0, 16).replace('T', ' ') })
+  return Object.assign({}, s, { createdText: s.createdAt.slice(0, 16).replace('T', ' ') }, format.dateParts(s.date))
 }
 
 Page({

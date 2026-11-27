@@ -1,31 +1,36 @@
 <view class="tabs">
-  <view wx:for="{{tabs}}" wx:key="value" class="tab {{status === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="onTab">{{item.label}}</view>
+  <view wx:for="{{tabs}}" wx:key="value" class="tab {{status === item.value ? 'on' : ''}}" data-value="{{item.value}}" bindtap="onTab"
+    aria-role="tab" aria-selected="{{status === item.value}}">{{item.label}}</view>
 </view>
 
-<view class="list">
-  <view wx:for="{{list}}" wx:key="id" class="card" data-id="{{item.id}}" bindtap="open">
-    <view class="card-cover placeholder">
-      <text class="cover-title">{{item.title}}</text>
+<view class="wrap">
+  <view wx:if="{{!list.length && loading}}" aria-busy="true">
+    <view class="skeleton sk-row" wx:for="{{[1, 2, 3, 4]}}" wx:key="*this"></view>
+  </view>
+
+  <view wx:for="{{list}}" wx:key="id" class="row {{item.status === '已结束' ? 'ended' : ''}}" hover-class="pressed" data-id="{{item.id}}" bindtap="open">
+    <view class="plate date {{item.open ? 'plate-yellow' : 'plate-white'}}">
+      <text class="day">{{item.day}}</text>
+      <text class="month">{{item.month}}月</text>
     </view>
-    <view class="card-body">
-      <view class="row">
+    <view class="info">
+      <view class="title-row">
         <text class="title">{{item.title}}</text>
-        <text class="tag {{item.stateClass}}">{{item.stateText}}</text>
+        <text class="state {{item.stateClass}}">{{item.stateText}}</text>
       </view>
-      <view class="meta">🕒 {{item.date}}</view>
-      <view class="meta">📍 {{item.place}}</view>
+      <view class="meta"><text class="num">{{item.time}}</text><text class="place">{{item.place}}</text></view>
       <view class="quota">
-        <view class="progress grow"><view class="progress-fill" style="width: {{item.percent}}%"></view></view>
-        <text class="quota-text">{{item.signup}}/{{item.quota}} 人</text>
+        <view class="meter grow"><view class="meter-fill {{item.full ? 'full' : ''}}" style="width: {{item.percent}}%"></view></view>
+        <text class="quota-text"><text class="num">{{item.signup}}/{{item.quota}}</text> 人</text>
       </view>
     </view>
   </view>
 </view>
 
-<empty wx:if="{{empty && !loading && !error}}" text="暂无相关活动" />
+<empty wx:if="{{empty && !loading && !error}}" text="这里还没有活动" />
 
 <view class="list-foot">
-  <text wx:if="{{loading}}">加载中…</text>
-  <text wx:elif="{{error}}" bindtap="onRetry">加载失败，点击重试</text>
-  <text wx:elif="{{finished && !empty}}">没有更多了</text>
+  <text wx:if="{{loading && list.length}}">加载中…</text>
+  <text wx:elif="{{error}}" class="link" bindtap="onRetry">没加载出来，点这里重试</text>
+  <text wx:elif="{{finished && !empty}}">已经到底了</text>
 </view>

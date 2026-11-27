@@ -1,1 +1,1 @@
-.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20rpx; padding: 20rpx 24rpx 0; }
+.sk-row { height: 112rpx; margin-top: 24rpx; }

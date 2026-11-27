@@ -1,17 +1,40 @@
-.hero { height: 360rpx; }
-.hero-title { font-size: 48rpx; font-weight: 700; letter-spacing: 4rpx; }
-.hero-sub { font-size: 24rpx; opacity: .8; margin-top: 14rpx; }
+.head { padding-top: 24rpx; }
+.board { display: flex; justify-content: space-between; align-items: stretch; height: 280rpx; padding: 28rpx 36rpx; border-width: 10rpx; border-radius: 40rpx; box-sizing: border-box; }
+.board-date { display: flex; align-items: flex-end; gap: 12rpx; }
+.day { font-size: 220rpx; line-height: .8; }
+.month { font-family: -apple-system, "PingFang SC", sans-serif; font-size: 36rpx; font-weight: 700; margin-bottom: 8rpx; }
+.board-side { display: flex; flex-direction: column; align-items: flex-end; justify-content: space-between; }
+.time { font-size: 56rpx; }
+.title { font-size: 48rpx; font-weight: 800; letter-spacing: -1rpx; line-height: 1.3; margin-top: 32rpx; }
 
-.title { font-size: 36rpx; font-weight: 700; margin-bottom: 16rpx; }
-.info { display: flex; font-size: 26rpx; padding: 10rpx 0; }
-.label { width: 150rpx; flex-shrink: 0; color: #999; }
-.mt { margin-top: 16rpx; }
-.desc { font-size: 26rpx; line-height: 1.8; color: #555; }
+.facts { margin-top: 24rpx; }
+.fact { display: flex; align-items: center; gap: 16rpx; padding: 20rpx 0; border-bottom: 1px solid var(--line); font-size: 30rpx; }
+.fact-label { width: 80rpx; flex-shrink: 0; color: var(--ink-2); }
+.fact-value { flex: 1; }
+.quota { padding: 24rpx 0 8rpx; }
+.quota-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 16rpx; font-size: 28rpx; }
+.quota-head .num { font-size: 34rpx; }
+.left { font-weight: 600; }
 
-.sheet-title { font-size: 32rpx; font-weight: 600; margin-bottom: 24rpx; }
-.field { display: flex; align-items: center; min-height: 96rpx; border-bottom: 2rpx solid #f0f1f3; }
-.field-label { width: 140rpx; flex-shrink: 0; color: #666; }
-.field-input { flex: 1; font-size: 28rpx; }
-.field-value { flex: 1; font-size: 28rpx; }
-.phone-btn { margin: 0; background: #fdeee7; color: #e8541e; font-size: 24rpx; border-radius: 30rpx; }
-.sheet-tip { font-size: 22rpx; color: #999; margin: 20rpx 0 30rpx; }
+.desc { display: block; font-size: 30rpx; line-height: 1.8; color: #2b2b29; }
+
+.sheet-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16rpx; }
+.sheet-title { font-size: 36rpx; font-weight: 700; flex: 1; }
+.close { display: flex; align-items: center; justify-content: center; width: 88rpx; height: 88rpx; margin-right: -24rpx; }
+.field { padding: 20rpx 0; }
+.field-label { display: block; font-size: 26rpx; font-weight: 600; margin-bottom: 12rpx; }
+.field-input { height: 96rpx; padding: 0 24rpx; border: 2rpx solid var(--line); border-radius: 16rpx; font-size: 30rpx; }
+.field-input.invalid { border-color: var(--red); }
+.ph { color: var(--ink-3); }
+.field-static { height: 96rpx; line-height: 96rpx; padding: 0 24rpx; border-radius: 16rpx; background: var(--paper-2); font-size: 36rpx; }
+.field-error { display: block; margin-top: 10rpx; font-size: 26rpx; color: var(--red); }
+button.phone-btn { height: 96rpx; }
+.sheet-tip { font-size: 26rpx; color: var(--ink-2); margin: 16rpx 0 28rpx; }
+
+.sk-hero { height: 280rpx; margin-top: 24rpx; border-radius: 40rpx; }
+.sk-line { height: 64rpx; margin-top: 32rpx; }
+
+/* 号码牌上的状态标记改为黑底，避免黄底黄字看不见 */
+.board .state-open { background: var(--ink); color: var(--yellow); }
+.board .state-ended { background: var(--paper-2); }
+.ended .meter-fill { background: var(--ink-3); }

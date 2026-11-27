@@ -3,15 +3,17 @@ const auth = require('../../utils/auth')
 const session = require('../../utils/session')
 const format = require('../../utils/format')
 const track = require('../../utils/track')
+const bikeFilter = require('../../utils/bike-filter')
 
+// 数值和单位分开，表格里数值右对齐、等宽，便于竖着比较
 function paramsOf(b) {
   return [
-    { label: '排量', value: `${b.cc}cc` },
-    { label: '最大功率', value: `${b.power}kW` },
-    { label: '峰值扭矩', value: `${b.torque}N·m` },
-    { label: '整备质量', value: `${b.weight}kg` },
-    { label: '座高', value: `${b.seatHeight}mm` },
-    { label: '油箱容积', value: `${b.tank}L` }
+    { label: '排量', value: b.cc, unit: 'cc' },
+    { label: '最大功率', value: b.power, unit: 'kW' },
+    { label: '峰值扭矩', value: b.torque, unit: 'N·m' },
+    { label: '整备质量', value: b.weight, unit: 'kg' },
+    { label: '座高', value: b.seatHeight, unit: 'mm' },
+    { label: '油箱容积', value: b.tank, unit: 'L' }
   ]
 }
 
@@ -32,7 +34,7 @@ Page({
   load() {
     return api.getBike(this.id).then(bike => {
       wx.setNavigationBarTitle({ title: bike.name })
-      this.setData({ bike, priceText: format.price(bike.price), params: paramsOf(bike), error: '' })
+      this.setData({ bike, priceText: format.price(bike.price), params: paramsOf(bike), tierLabel: format.tier(bike.cc).label, tierKey: format.tier(bike.cc).key, tierColor: format.tier(bike.cc).color, error: '' })
     }, err => {
       this.setData({ error: err.msg || '加载失败' })
     })
@@ -62,6 +64,13 @@ Page({
 
   goActivities() { wx.switchTab({ url: '/pages/activity/list' }) },
   goBikes() { wx.switchTab({ url: '/pages/bike/list' }) },
+
+  // 标签直达筛选：车型列表是 tab 页，switchTab 不能带参数，经 bike-filter 中转
+  onLabel(e) {
+    const { type, value } = e.currentTarget.dataset
+    bikeFilter.set(type === 'tags' ? { tags: [value] } : { [type]: value })
+    wx.switchTab({ url: '/pages/bike/list' })
+  },
 
   onShareAppMessage() {
     const b = this.data.bike

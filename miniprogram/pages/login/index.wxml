@@ -1,20 +1,22 @@
 <view class="page">
-  <view class="logo">🏍️</view>
+  <view class="plate plate-white mark" aria-hidden="true">XX</view>
   <view class="brand">XX 摩托</view>
-  <view class="slogan">登录后可收藏车型、报名活动</view>
+  <view class="slogan">登录后可以收藏车型、报名活动</view>
 
   <view wx:if="{{step === 'login'}}" class="actions">
-    <button class="btn-primary btn-block" loading="{{busy}}" bindtap="onLogin">微信一键登录</button>
-    <view class="agree" bindtap="toggleAgree">
-      <view class="check {{agreed ? 'on' : ''}}">{{agreed ? '✓' : ''}}</view>
+    <button class="btn btn-primary btn-block" loading="{{busy}}" bindtap="onLogin">微信一键登录</button>
+    <view class="agree" bindtap="toggleAgree" aria-role="checkbox" aria-checked="{{agreed}}">
+      <view class="check {{agreed ? 'on' : ''}}">
+        <view wx:if="{{agreed}}" class="tick"></view>
+      </view>
       <text>我已阅读并同意</text>
       <text class="link" catchtap="showAgreement">《用户协议》和《隐私政策》</text>
     </view>
   </view>
 
   <view wx:else class="actions">
-    <view class="tip">为方便活动报名与到店联系，请授权手机号</view>
-    <button class="btn-primary btn-block" open-type="getPhoneNumber" bindgetphonenumber="onPhone">授权手机号</button>
-    <view class="skip" bindtap="finish">暂不授权，稍后在「我的」中绑定</view>
+    <view class="tip">报名活动和到店联系需要手机号</view>
+    <button class="btn btn-primary btn-block" open-type="getPhoneNumber" bindgetphonenumber="onPhone">授权手机号</button>
+    <view class="skip" bindtap="finish">先不授权，以后在「我的」里绑定</view>
   </view>
 </view>

@@ -11,14 +11,17 @@ module.exports = {
   getHome: () => request({ url: '/api/home' }),
 
   // 车型与收藏
-  getBikes: params => request({ url: '/api/bikes', data: params }),
-  getBike: id => request({ url: `/api/bikes/${id}` }),
+  // opts 可传 { silent: true }，用于首页补充信息等失败也不打扰用户的场景
+  getBikes: (params, opts) => request(Object.assign({ url: '/api/bikes', data: params }, opts)),
+  getBike: (id, opts) => request(Object.assign({ url: `/api/bikes/${id}` }, opts)),
+  // 标签筛选的可选项：{ categories: [], tags: [] }
+  getBikeFilters: () => request({ url: '/api/bikes/filters', silent: true }),
   setFavorite: (id, on) => request({ url: `/api/bikes/${id}/favorite`, method: on ? 'POST' : 'DELETE' }),
   getFavorites: params => request({ url: '/api/favorites', data: params }),
 
   // 活动与报名
   getActivities: params => request({ url: '/api/activities', data: params }),
-  getActivity: id => request({ url: `/api/activities/${id}` }),
+  getActivity: (id, opts) => request(Object.assign({ url: `/api/activities/${id}` }, opts)),
   signup: (id, data) => request({ url: `/api/activities/${id}/signup`, method: 'POST', data, loading: '提交中' }),
   getMySignups: params => request({ url: '/api/signups/mine', data: params }),
 

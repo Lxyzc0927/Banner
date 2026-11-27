@@ -1,5 +1,3 @@
-.empty { padding: 120rpx 40rpx; text-align: center; color: #999; }
-.icon { font-size: 80rpx; opacity: .5; }
-.text { font-size: 26rpx; margin-top: 16rpx; }
-.action { margin-top: 28rpx; background: #fff; color: #e8541e; border: 2rpx solid #e8541e; border-radius: 30rpx; font-size: 24rpx; }
-.action::after { border: none; }
+.empty { display: flex; flex-direction: column; align-items: center; padding: 120rpx 48rpx; text-align: center; }
+.art { width: 96rpx; height: 96rpx; opacity: .6; }
+.text { font-size: 28rpx; color: var(--ink-2); margin: 20rpx 0 32rpx; }

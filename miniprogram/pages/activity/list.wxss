@@ -1,16 +1,27 @@
-.tabs { position: sticky; top: 0; z-index: 5; display: flex; background: #fff; padding: 0 24rpx; }
-.tab { flex: 1; text-align: center; padding: 24rpx 0; font-size: 28rpx; color: #666; border-bottom: 4rpx solid transparent; }
-.tab.active { color: #e8541e; font-weight: 600; border-bottom-color: #e8541e; }
+.tabs { position: sticky; top: 0; z-index: 5; display: flex; padding: 0 16rpx; background: var(--paper); border-bottom: 1px solid var(--line); }
+.tab { flex: 1; text-align: center; height: 96rpx; line-height: 96rpx; font-size: 30rpx; color: var(--ink-2); position: relative; }
+.tab.on { color: var(--ink); font-weight: 700; }
+.tab.on::after { content: ""; position: absolute; left: 50%; bottom: 0; width: 64rpx; height: 8rpx; margin-left: -32rpx; border-radius: 4rpx; background: var(--yellow); }
 
-.list { padding: 20rpx 24rpx 0; }
-.card { background: #fff; border-radius: 16rpx; overflow: hidden; margin-bottom: 20rpx; }
-.card-cover { height: 200rpx; }
-.cover-title { font-size: 36rpx; font-weight: 700; letter-spacing: 4rpx; }
-.card-body { padding: 24rpx; }
-.row { display: flex; justify-content: space-between; align-items: center; }
-.title { font-size: 30rpx; font-weight: 600; }
-.row .tag { margin-right: 0; }
-.meta { font-size: 24rpx; color: #888; margin-top: 10rpx; }
-.quota { display: flex; align-items: center; gap: 16rpx; margin-top: 18rpx; }
+.row { display: flex; gap: 24rpx; padding: 32rpx 0; border-bottom: 1px solid var(--line); }
+.row.pressed { background: var(--paper-2); }
+.date { width: 128rpx; height: 128rpx; flex-direction: column; }
+.day { font-size: 64rpx; }
+.month { font-family: -apple-system, "PingFang SC", sans-serif; font-size: 22rpx; font-weight: 600; margin-top: 4rpx; }
+.ended .date, .ended .title { color: var(--ink-2); }
+.ended .date { border-color: var(--line); }
+
+.info { flex: 1; min-width: 0; }
+.title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
+.title { font-size: 32rpx; font-weight: 600; line-height: 1.4; }
+.meta { display: flex; gap: 16rpx; font-size: 26rpx; color: var(--ink-2); margin-top: 8rpx; }
+.meta .num { color: var(--ink); font-size: 28rpx; }
+.place { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.quota { display: flex; align-items: center; gap: 16rpx; margin-top: 20rpx; }
 .grow { flex: 1; }
-.quota-text { font-size: 22rpx; color: #888; }
+.quota-text { font-size: 24rpx; color: var(--ink-2); flex-shrink: 0; }
+.quota-text .num { font-size: 28rpx; color: var(--ink); }
+
+.sk-row { height: 128rpx; margin-top: 32rpx; }
+/* 已结束的活动不再用红色强调满员 */
+.ended .meter-fill { background: var(--ink-3); }

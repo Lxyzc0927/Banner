@@ -54,10 +54,32 @@ const routes = [
 
   ['GET', /^\/api\/bikes$/, false, q => {
     const kw = String(q.keyword || '').trim().toLowerCase()
+    const min = q.minPrice ? Number(q.minPrice) : null
+    const max = q.maxPrice ? Number(q.maxPrice) : null
+    if ((min != null && isNaN(min)) || (max != null && isNaN(max)) || (min != null && max != null && min > max)) {
+      return fail(400, '价格区间不正确')
+    }
+    // tags 逗号分隔，车型须包含全部标签
+    const tags = String(q.tags || '').split(',').map(t => t.trim()).filter(Boolean)
+    const tierOk = b => !q.tier || (q.tier === 'entry' ? b.cc <= 250 : q.tier === 'mid' ? b.cc >= 300 && b.cc < 500 : q.tier === 'big' ? b.cc >= 500 : false)
     const list = onlineBikes().filter(b =>
       (!kw || b.name.toLowerCase().indexOf(kw) > -1 || b.category.toLowerCase().indexOf(kw) > -1) &&
-      (!q.cc || b.cc === Number(q.cc)))
+      (!q.cc || b.cc === Number(q.cc)) &&
+      (!q.category || b.category === q.category) &&
+      tierOk(b) &&
+      tags.every(t => b.tags.indexOf(t) > -1) &&
+      (min == null || b.price >= min) &&
+      (max == null || b.price <= max))
+    // 价格相同时按 id，保证分页顺序稳定
+    if (q.sort === 'price_asc') list.sort((a, b) => a.price - b.price || a.id - b.id)
+    else if (q.sort === 'price_desc') list.sort((a, b) => b.price - a.price || a.id - b.id)
     return ok(paginate(list.map(bikeBrief), q))
+  }],
+  // 必须放在 /api/bikes/:id 之前
+  ['GET', /^\/api\/bikes\/filters$/, false, () => {
+    const bikes = onlineBikes()
+    const uniq = arr => arr.filter((v, i) => arr.indexOf(v) === i)
+    return ok({ categories: uniq(bikes.map(b => b.category)), tags: uniq([].concat.apply([], bikes.map(b => b.tags))) })
   }],
   ['GET', /^\/api\/bikes\/(\d+)$/, false, (q, p, s, authed) => {
     const b = onlineBikes().find(x => x.id === Number(p[1]))

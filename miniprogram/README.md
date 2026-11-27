@@ -25,12 +25,14 @@ miniprogram/
 │   ├── list.js                      分页列表（下拉刷新、触底加载、过期请求丢弃）
 │   ├── track.js                     行为埋点
 │   ├── nav.js                       后台跳转链接 → 小程序页面
-│   └── format.js                    价格、百分比格式化
+│   ├── bike-filter.js               从详情页标签跳到车型 tab 时中转筛选条件
+│   └── format.js                    价格、百分比、排量档位、日期拆分
 ├── mock/                            本地模拟后端（data.js 数据、chat.js 客服、index.js 路由）
-├── components/bike-card、empty      车型卡片、空状态
+├── assets/                          图标（Phosphor，MIT）与 tabBar 图标，许可见 assets/LICENSES.md
+├── components/plate、bike-card、empty 号码牌、车型行、空状态
 └── pages/
     ├── home/index                   首页：Banner、快捷入口、热门车型、资讯
-    ├── bike/list、bike/detail       车型列表（搜索 + 排量筛选 + 分页）、详情（参数、收藏、咨询）
+    ├── bike/list、bike/detail       车型列表（搜索 + 排量 + 价格区间 + 价格排序 + 标签筛选 + 分页）、详情（参数、收藏、咨询，点标签直达筛选）
     ├── activity/list、detail        活动列表（状态筛选）、详情与报名
     ├── mine/index、favorites、signups 我的、我的收藏、我的报名
     ├── login/index                  微信登录 + 手机号授权
@@ -70,7 +72,8 @@ flowchart LR
 | POST | `/api/auth/phone` | ✓ | `code`（getPhoneNumber） | `{ phone }`（脱敏） |
 | GET | `/api/user/me` | ✓ | | `user` |
 | GET | `/api/home` | | | `{ banners: [{ id, title, image, link, sort }], news: [{ id, title, summary, date }], hotBikes: [车型简要] }` |
-| GET | `/api/bikes` | | `keyword, cc, pageNo, pageSize` | 分页，车型简要 `{ id, name, category, cc, price, cover, tags }` |
+| GET | `/api/bikes` | | `keyword, cc, minPrice, maxPrice, sort, category, tier, tags, pageNo, pageSize` | 分页，车型简要 `{ id, name, category, cc, price, cover, tags }`。`minPrice`/`maxPrice` 单位元、含边界，可只传一个；`sort` 为 `price_asc` / `price_desc`，不传为默认排序；价格相同时按 id 升序，保证分页稳定；区间不合法返回 `code: 400`。`category` 为类别原文（如 `巡航`）；`tier` 为排量档位 `entry`（≤250cc）/ `mid`（300–499cc）/ `big`（≥500cc），可与 `cc` 同时传，取交集；`tags` 逗号分隔，车型须同时包含全部标签 |
+| GET | `/api/bikes/filters` | | | 标签筛选的可选项 `{ categories: string[], tags: string[] }`，只统计上架车型 |
 | GET | `/api/bikes/:id` | 可选 | | 车型简要 + `power, torque, weight, seatHeight, tank, images[], desc, favorited` |
 | POST / DELETE | `/api/bikes/:id/favorite` | ✓ | | `{ favorited }`，要求幂等 |
 | GET | `/api/favorites` | ✓ | `pageNo, pageSize` | 分页，车型简要 |
@@ -94,10 +97,16 @@ flowchart LR
 | `view` | `module`：`home` / `bike` / `bike_detail` / `activity` / `activity_detail` / `mine` / `chat`；详情页另带 `bikeId` / `activityId` | 模块热度、访问趋势 |
 | `signup_click` | `activityId` | 转化漏斗：发起报名 |
 | `signup_success` | `activityId` | 转化漏斗：报名成功 |
+| `bike_sort` | `sort`：`default` / `price_asc` / `price_desc` | 车型列表排序方式的使用情况 |
+| `bike_price_filter` | `min`、`max`（元，空串表示不限） | 用户关心的价格区间分布 |
+| `bike_tag_filter` | `source`：`detail`（详情页点标签）/ `list`（列表标签面板）；`category`、`tier`、`tags` | 标签筛选的使用情况，以及从详情页标签跳转的次数 |
 
 漏斗可按「访问首页（view/home）→ 查看车型（view/bike_detail）→ 发起报名 → 报名成功」统计。
 
 ## 待办
 
-- TabBar 图标：在 `app.json` 的 `tabBar.list` 里补 `iconPath` / `selectedIconPath`（81×81 PNG）。目前只显示文字。
-- 车型图、Banner 图：接口返回 `cover` / `images` / `image` 后会自动显示，没有图时显示渐变占位。
+- 车型图、Banner 图：接口返回 `cover` / `images` / `image` 后会自动显示；没有图时车型显示排量号码牌，Banner 显示黄色号码牌。
+
+## 视觉规范
+
+见仓库根目录 `DESIGN.md`。号码牌颜色按排量分档：150/250 白牌，300/400 黄牌，500 红牌（`utils/format.js` 的 `tier`）。黄色只用于当前选中、报名中、已报名待参加和首页 Banner。

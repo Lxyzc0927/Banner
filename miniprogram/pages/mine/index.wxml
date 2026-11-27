@@ -1,31 +1,49 @@
-<view class="header">
-  <image wx:if="{{user.avatar}}" class="avatar" src="{{user.avatar}}" mode="aspectFill" />
-  <view wx:else class="avatar avatar-ph">{{user ? '骑' : '?'}}</view>
-  <view wx:if="{{user}}" class="who">
-    <view class="nick">{{user.nickname}}</view>
-    <view class="phone">{{user.phone || '未绑定手机号'}}</view>
-  </view>
-  <view wx:else class="who" bindtap="onLogin">
-    <view class="nick">点击登录</view>
-    <view class="phone">登录后可收藏车型、报名活动</view>
+<view class="wrap header">
+  <block wx:if="{{user}}">
+    <image wx:if="{{user.avatar}}" class="avatar" src="{{user.avatar}}" mode="aspectFill" />
+    <view wx:else class="plate plate-white avatar-plate" aria-hidden="true">骑</view>
+    <view class="who">
+      <view class="nick">{{user.nickname}}</view>
+      <view class="phone {{user.phone ? 'num' : ''}}">{{user.phone || '还没绑定手机号'}}</view>
+    </view>
+  </block>
+  <block wx:else>
+    <view class="plate plate-white avatar-plate" aria-hidden="true">
+      <image class="icon" src="/assets/icons/user-bold-000000.svg" />
+    </view>
+    <view class="who">
+      <view class="nick">还没登录</view>
+      <view class="phone">登录后可以收藏车型、报名活动</view>
+    </view>
+    <button class="btn btn-primary btn-small" bindtap="onLogin">登录</button>
+  </block>
+</view>
+
+<view wx:if="{{user && !user.phone}}" class="wrap">
+  <view class="bind">
+    <text class="bind-text">绑定手机号后，报名活动不用再填</text>
+    <button class="btn btn-ghost btn-small" open-type="getPhoneNumber" bindgetphonenumber="onPhone">绑定</button>
   </view>
 </view>
 
-<view wx:if="{{user && !user.phone}}" class="bind">
-  <text>绑定手机号，报名活动更方便</text>
-  <button class="bind-btn" size="mini" open-type="getPhoneNumber" bindgetphonenumber="onPhone">去绑定</button>
+<view class="wrap menu">
+  <view class="menu-item" hover-class="pressed" data-url="/pages/mine/favorites" data-auth="{{true}}" bindtap="onMenu">
+    <image class="icon" src="/assets/icons/heart-bold-000000.svg" aria-hidden="true" />
+    <text class="menu-text">我的收藏</text>
+    <image class="icon-s" src="/assets/icons/caret-right-bold-5a5a57.svg" aria-hidden="true" />
+  </view>
+  <view class="menu-item" hover-class="pressed" data-url="/pages/mine/signups" data-auth="{{true}}" bindtap="onMenu">
+    <image class="icon" src="/assets/icons/flag-checkered-bold-000000.svg" aria-hidden="true" />
+    <text class="menu-text">我的报名</text>
+    <image class="icon-s" src="/assets/icons/caret-right-bold-5a5a57.svg" aria-hidden="true" />
+  </view>
+  <view class="menu-item" hover-class="pressed" data-url="/pages/chat/index" bindtap="onMenu">
+    <image class="icon" src="/assets/icons/chat-circle-text-bold-000000.svg" aria-hidden="true" />
+    <text class="menu-text">智能客服</text>
+    <image class="icon-s" src="/assets/icons/caret-right-bold-5a5a57.svg" aria-hidden="true" />
+  </view>
 </view>
 
-<view class="menu">
-  <view class="menu-item" data-url="/pages/mine/favorites" data-auth="{{true}}" bindtap="onMenu">
-    <text class="menu-icon">♥</text><text class="menu-text">我的收藏</text><text class="arrow">›</text>
-  </view>
-  <view class="menu-item" data-url="/pages/mine/signups" data-auth="{{true}}" bindtap="onMenu">
-    <text class="menu-icon">🚩</text><text class="menu-text">我的报名</text><text class="arrow">›</text>
-  </view>
-  <view class="menu-item" data-url="/pages/chat/index" bindtap="onMenu">
-    <text class="menu-icon">💬</text><text class="menu-text">智能客服</text><text class="arrow">›</text>
-  </view>
+<view wx:if="{{user}}" class="wrap">
+  <view class="logout" hover-class="pressed" bindtap="onLogout">退出登录</view>
 </view>
-
-<view wx:if="{{user}}" class="logout" bindtap="onLogout">退出登录</view>

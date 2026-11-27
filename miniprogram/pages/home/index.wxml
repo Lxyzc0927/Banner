@@ -1,46 +1,84 @@
-<empty wx:if="{{error}}" text="加载失败，请检查网络" action-text="重新加载" bind:action="onRetry" />
+<empty wx:if="{{error}}" text="首页没加载出来，检查网络后重试" action-text="重新加载" bind:action="onRetry" />
 
-<view wx:elif="{{!loading}}" class="page">
-  <swiper wx:if="{{banners.length}}" class="banner" autoplay circular interval="4000" indicator-dots indicator-active-color="#e8541e">
-    <swiper-item wx:for="{{banners}}" wx:key="id" data-link="{{item.link}}" bindtap="onBanner">
-      <image wx:if="{{item.image}}" class="banner-img" src="{{item.image}}" mode="aspectFill" />
-      <view wx:else class="banner-img placeholder">
-        <text class="banner-title">{{item.title}}</text>
-        <text wx:if="{{item.link}}" class="banner-sub">点击了解详情 ›</text>
+<view wx:elif="{{loading}}" class="wrap" aria-busy="true">
+  <view class="skeleton sk-search"></view>
+  <view class="skeleton sk-banner"></view>
+  <view class="skeleton sk-row" wx:for="{{[1, 2, 3]}}" wx:key="*this"></view>
+</view>
+
+<view wx:else class="page">
+  <view class="wrap top">
+    <view class="search" hover-class="pressed" bindtap="goBikes" aria-role="button" aria-label="搜索车型">
+      <image class="icon-s" src="/assets/icons/magnifying-glass-bold-5a5a57.svg" aria-hidden="true" />
+      <text wx:if="{{onSale}}">在 <text class="num count">{{onSale}}</text> 款在售车型里搜</text>
+      <text wx:else>搜车型名称，如 风行 150</text>
+    </view>
+  </view>
+
+  <swiper wx:if="{{banners.length}}" class="banner" current="{{bannerCurrent}}" autoplay="{{autoplay && banners.length > 1}}" circular interval="5000"
+    indicator-dots="{{banners.length > 1}}" indicator-color="rgba(0,0,0,.2)" indicator-active-color="#000000">
+    <swiper-item wx:for="{{banners}}" wx:key="id">
+      <view class="board board-{{item.plate.color || 'yellow'}}" hover-class="pressed" data-link="{{item.link}}" bindtap="onBanner">
+        <image wx:if="{{item.image}}" class="board-img" src="{{item.image}}" mode="aspectFill" />
+        <block wx:else>
+          <view class="board-text">
+            <view class="board-title">{{item.title}}</view>
+            <view wx:if="{{item.plate.line}}" class="board-line">{{item.plate.line}}</view>
+            <view wx:if="{{item.link}}" class="board-go">
+              <text>{{item.goText}}</text>
+              <image class="icon-s" src="{{item.plate.color === 'red' ? '/assets/icons/caret-right-bold-ffffff.svg' : '/assets/icons/caret-right-bold-000000.svg'}}" aria-hidden="true" />
+            </view>
+          </view>
+          <view wx:if="{{item.plate}}" class="board-num">
+            <text class="num big">{{item.plate.big}}</text>
+            <text class="unit">{{item.plate.unit}}</text>
+          </view>
+        </block>
       </view>
     </swiper-item>
   </swiper>
 
   <view class="entries">
-    <view class="entry" bindtap="goBikes"><view class="entry-icon">🏍️</view><text>全部车型</text></view>
-    <view class="entry" bindtap="goActivities"><view class="entry-icon">🚩</view><text>近期活动</text></view>
-    <view class="entry" bindtap="goChat"><view class="entry-icon">💬</view><text>智能客服</text></view>
-    <view class="entry" bindtap="goFavorites"><view class="entry-icon">♥</view><text>我的收藏</text></view>
+    <view class="entry" hover-class="pressed" bindtap="goBikes">
+      <image class="icon" src="/assets/icons/motorcycle-bold-000000.svg" aria-hidden="true" /><text>全部车型</text>
+    </view>
+    <view class="entry" hover-class="pressed" bindtap="goActivities">
+      <image class="icon" src="/assets/icons/flag-checkered-bold-000000.svg" aria-hidden="true" /><text>近期活动</text>
+    </view>
+    <view class="entry" hover-class="pressed" bindtap="goChat">
+      <image class="icon" src="/assets/icons/chat-circle-text-bold-000000.svg" aria-hidden="true" /><text>智能客服</text>
+    </view>
+    <view class="entry" hover-class="pressed" bindtap="goFavorites">
+      <image class="icon" src="/assets/icons/heart-bold-000000.svg" aria-hidden="true" /><text>我的收藏</text>
+    </view>
   </view>
 
   <view class="section">
     <view class="section-head">
       <text class="section-title">热门车型</text>
-      <text class="section-more" bindtap="goBikes">查看全部 ›</text>
+      <view class="section-more" bindtap="goBikes">全部车型<image class="icon-s" src="/assets/icons/caret-right-bold-5a5a57.svg" aria-hidden="true" /></view>
     </view>
-    <view class="grid">
-      <bike-card wx:for="{{hotBikes}}" wx:key="id" class="grid-item" bike="{{item}}" />
+    <view class="rule-top">
+      <bike-card wx:for="{{hotBikes}}" wx:key="id" bike="{{item}}" />
     </view>
+  </view>
+
+  <view class="chat-entry" hover-class="pressed" bindtap="goChat">
+    <view class="chat-text">
+      <view class="chat-title">不知道选哪款？</view>
+      <view class="chat-sub">说出预算和用途，客服帮你挑</view>
+    </view>
+    <view class="chat-btn">问客服</view>
   </view>
 
   <view wx:if="{{news.length}}" class="section">
     <view class="section-head"><text class="section-title">新车资讯</text></view>
-    <view wx:for="{{news}}" wx:key="id" class="news" data-index="{{index}}" bindtap="onNews">
-      <view class="news-title">{{item.title}}</view>
-      <view class="news-date">{{item.date}}</view>
+    <view class="rule-top">
+      <view wx:for="{{news}}" wx:key="id" class="news" hover-class="pressed" data-index="{{index}}" bindtap="onNews">
+        <view class="news-title">{{item.title}}</view>
+        <view class="news-date num">{{item.date}}</view>
+      </view>
     </view>
   </view>
-
-  <view class="chat-entry" bindtap="goChat">
-    <view>
-      <view class="chat-title">不知道怎么选？</view>
-      <view class="chat-sub">告诉智能客服预算和用途，帮你推荐车型</view>
-    </view>
-    <text class="chat-btn">去咨询</text>
-  </view>
+  <view class="end"></view>
 </view>
