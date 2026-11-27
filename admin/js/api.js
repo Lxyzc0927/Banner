@@ -20,6 +20,11 @@
  *   - [P1] 401 只清理「请求所属会话仍是当前会话」的登录态，旧请求的延迟 401 不再清掉新登录
  *   - [P2] 401 处理前置到 blob/json 分流之前，CSV 导出遇 401 同样清理会话
  *   - [P2] 权限判断先要求有有效会话，未登录时 canInterpret() 不再误返回 true
+ *
+ * 复审修复（组长 d54dbc3 复审意见）：
+ *   - [P2] canInterpret() 只对已登录的 super_admin 返回 true（operator 调解读接口 403）
+ *   - [P2] 引入会话版本号：每次登录/退出递增，401 只在版本仍匹配时清理，
+ *          解决同秒重登签发相同 JWT 时 token 比较无法区分两次登录的问题
  * ============================================================ */
 
 /* ---------- 全局配置：联调时只改这里 ---------- */
@@ -28,6 +33,7 @@ const API_CONFIG = {
   baseURL: 'http://127.0.0.1:3000',                // C 发局域网 IP 后替换；末尾不要带 /
   tokenKey: 'admin_token',                         // localStorage 中 token 的键名
   roleKey: 'admin_role',                           // localStorage 中角色的键名（登录时保存）
+  sessionVersionKey: 'admin_session_version',      // 会话版本号：区分同秒重登签发的相同 JWT
   successCode: 0,                                  // code === 0 视为成功
   timeout: 10000
 };
@@ -61,14 +67,22 @@ const API = {
   mySignups:    '/api/users/me/signups'            // GET 我的报名
 };
 
-/* ---------- 会话存取：token 与角色一起存、一起清 ---------- */
+/* ---------- 会话存取：token、角色、会话版本一体管理 ----------
+ * 会话版本（session version）用来区分「同秒重新登录」：D 给同一账号同一秒会签发
+ * 完全相同的 JWT，仅比较 token 无法识别这是两次不同的登录。每次成功登录 / 退出
+ * 都会递增版本；请求发出时记录当时的版本，401 时只有版本仍匹配才清理会话，
+ * 这样迟到的旧请求 401 就不会误清新会话。
+ */
 const Token = {
   get()      { return localStorage.getItem(API_CONFIG.tokenKey) || ''; },
   set(t)     { localStorage.setItem(API_CONFIG.tokenKey, t); },
   clear()    { localStorage.removeItem(API_CONFIG.tokenKey); },
   getRole()  { return localStorage.getItem(API_CONFIG.roleKey) || ''; },
   setRole(r) { if (r) localStorage.setItem(API_CONFIG.roleKey, r); },
-  // 会话失效时 token 与角色同时清理，避免界面残留旧权限
+  // 会话版本：localStorage 存字符串，读取时转数字
+  version()  { return Number(localStorage.getItem(API_CONFIG.sessionVersionKey) || 0); },
+  bump()     { const v = this.version() + 1; localStorage.setItem(API_CONFIG.sessionVersionKey, String(v)); return v; },
+  // 会话失效时 token 与角色一起清理，避免界面残留旧权限（不改变版本，版本由调用方按语义递增）
   clearAll() { localStorage.removeItem(API_CONFIG.tokenKey); localStorage.removeItem(API_CONFIG.roleKey); }
 };
 
@@ -91,6 +105,8 @@ async function request(path, opts = {}) {
   }
   const headers = {};
   const token = Token.get();
+  // 记录请求发出时的会话版本，用于 401 时判断是否仍是当前会话
+  const sessionVersion = Token.version();
   if (token) headers['Authorization'] = 'Bearer ' + token;
   if (body !== undefined && !(body instanceof FormData)) headers['Content-Type'] = 'application/json';
 
@@ -108,10 +124,11 @@ async function request(path, opts = {}) {
   }
 
   // 鉴权失败：放在 blob / json 分流之前，让 CSV 导出与 JSON 请求走同一套会话清理。
-  // 只有「该请求所属会话仍是当前会话」才清理——请求带的 token 与当前 token 一致才说明
-  // 是当前登录态失效；否则是旧会话请求的延迟 401，不能清掉用户后来重新登录的 token/角色。
+  // 用会话版本而非 token 判断是否为当前会话：同秒重登会签发完全相同的 JWT，token 比较
+  // 区分不出两次登录。只有「请求发出时的会话版本 === 当前版本」才说明是当前登录态失效，
+  // 才清理 token/角色；否则是旧会话请求的延迟 401，不能清掉用户后来重新登录的会话。
   if (res.status === 401) {
-    if (token && Token.get() === token) Token.clearAll();
+    if (sessionVersion === Token.version()) Token.clearAll();
     if (!silent) toast('登录已过期，请重新登录');
     throw new Error('UNAUTHORIZED');
   }
@@ -175,11 +192,19 @@ const Adapt = {
 const Api = {
   async login(username, password) {
     const data = await request(API.login, { method: 'POST', body: { username, password } });
+    // 先递增会话版本，再写入新 token/角色：让此前发出的旧请求 401 无法清理这次新登录
+    Token.bump();
     Token.set(data.token);
     // 角色读 data.admin.role（服务端返回 { token, tokenType, expiresIn, admin: {...} }）
     const role = data && data.admin && data.admin.role;
     if (role) Token.setRole(role);
     return data;   // { token, admin: { id, username, role, ... } }
+  },
+
+  // 退出登录：递增版本使在途请求失效，再清理 token/角色
+  async logout() {
+    Token.bump();
+    Token.clearAll();
   },
 
   banners: {
@@ -255,21 +280,20 @@ const Api = {
 };
 
 /* ---------- 权限判断（角色来自登录时保存的 data.admin.role） ----------
- * 服务端现状（51bc0d3 auth.js）：super_admin 与 operator 均含 activity:export 与
- * analytics:interpret 权限；仅 admin:read/admin:write 为 super_admin 独有。
- * 组长意见第 3 条要求「含手机号 CSV 仅 super_admin 可导出」，与服务端当前权限
- * 不一致——以组长定稿为准：手机号导出仅 super_admin；此点待 D 收紧服务端后一致。
+ * 以 D 服务端 264b515 auth.js 为准：
+ *   super_admin: 含 activity:export / analytics:read / analytics:interpret / admin:*
+ *   operator:    仅 activity:export_masked / analytics:read / user:* / activity:*
+ * 即含手机号 CSV 导出与 AI 解读均仅 super_admin 可用；operator 调解读接口返回 403。
+ * 前端权限必须先要求存在有效会话，再判角色，避免未登录或清空会话后误判为有权限。
  */
 const Perm = {
-  // 权限判断先要求存在有效会话：无 token 一律视为无权限，避免清空会话后
-  // 缺省 role='operator' 让 canInterpret() 误返回 true
   hasSession: () => Boolean(Token.get()),
   role:   () => Token.getRole() || 'operator',
   setRole: r => Token.setRole(r),
-  canExportPhone: () => Perm.hasSession() && Perm.role() === 'super_admin',
+  canExportPhone:  () => Perm.hasSession() && Perm.role() === 'super_admin',
   canManageAdmins: () => Perm.hasSession() && Perm.role() === 'super_admin',
-  // AI 解读当前服务端两角色均可用；待组内确认后与文档/服务端/界面同步
-  canInterpret: () => Perm.hasSession() && (Perm.role() === 'super_admin' || Perm.role() === 'operator')
+  // AI 解读仅 super_admin 可用（operator 调接口会 403）
+  canInterpret: () => Perm.hasSession() && Perm.role() === 'super_admin'
 };
 
 /* ---------- 图片 URL：后端存相对地址，展示时拼 baseURL ---------- */
