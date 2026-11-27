@@ -6,17 +6,21 @@
  * 用法：
  *   $env:GITHUB_TOKEN = "github_pat_xxx"   # 只需 repo 读写权限，建议 1—7 天过期
  *   node tools/push_via_api.js --dry-run
- *   node tools/push_via_api.js
+ *   node tools/push_via_api.js --base main --branch feature/lumenh26-integration
  *
  * 可选：
  *   --owner Lxyzc0927
  *   --repo Banner
+ *   --base main            以 main 为基线（默认 main，保留 miniprogram/、admin/、DESIGN.md 等主线文件）
  *   --branch feature/lumenh26
- *   --merge-main          推送后尝试合并到 main（main 受保护时会失败，交给组长）
+ *   --reset                重置已有分支：以 main 的 tree + 本目录文件重建，force 更新该分支
+ *   --force                目标分支已存在且与 main 分叉时，强制覆盖目标分支
+ *   --merge-main           推送后尝试合并到 main（main 受保护时会失败，交给组长）
  *
  * 说明：
+ * - 从 --base 的 tree 开始，只叠加本目录文件；不会删除 base 里的 miniprogram/、admin/。
  * - 不会覆盖根目录 README.md（团队 README 保留），只上传 README-D.md。
- * - 不会上传 .env、server/data、node_modules、临时渲染目录。
+ * - 不会上传 .env、server/data、node_modules、临时渲染目录；server/data/app.db 不会进入提交。
  * - 使用 base_tree 只新增/覆盖本模块文件，不删除仓库里已有文件。
  */
 
@@ -26,10 +30,14 @@ const path = require('node:path');
 const ROOT = path.resolve(__dirname, '..');
 const OWNER = arg('owner', process.env.GITHUB_OWNER || 'Lxyzc0927');
 const REPO = arg('repo', process.env.GITHUB_REPO || 'Banner');
+const BASE_BRANCH = arg('base', process.env.GITHUB_BASE || 'main');
+const BASE_EXPLICIT = process.argv.includes('--base');
 const BRANCH = arg('branch', process.env.GITHUB_BRANCH || 'feature/lumenh26');
 const TOKEN = process.env.GITHUB_TOKEN || '';
 const DRY_RUN = process.argv.includes('--dry-run');
 const MERGE_MAIN = process.argv.includes('--merge-main');
+const FORCE = process.argv.includes('--force');
+const RESET = process.argv.includes('--reset');
 
 function arg(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
@@ -99,6 +107,7 @@ async function main() {
   const files = collectFiles();
   const total = files.reduce((sum, file) => sum + file.size, 0);
   console.log(`目标: ${OWNER}/${REPO} @ ${BRANCH}`);
+  console.log(`基线: ${BASE_BRANCH}（保留 miniprogram/、admin/、DESIGN.md 等主线文件）`);
   console.log(`文件: ${files.length} 个，${(total / 1024 / 1024).toFixed(2)} MB`);
   console.log(`排除: 根 README.md / .env / server/data / node_modules / 临时渲染目录`);
   for (const file of files.slice(0, 12)) console.log(`  + ${file.rel}`);
@@ -112,11 +121,20 @@ async function main() {
     throw new Error('缺少 GITHUB_TOKEN。请创建 Personal Access Token（repo 读写权限），然后设置环境变量。');
   }
 
-  // 1. 找到分支当前提交
-  const ref = await github('GET', `/repos/${OWNER}/${REPO}/git/ref/heads/${BRANCH}`);
-  const baseSha = ref.object.sha;
+  // 1. 找到目标分支；已存在时默认以它自身为基线做增量提交。
+  //    首次创建集成分支时以 main 为基线，从而保留 miniprogram/、admin/。
+  let targetRef = null;
+  try {
+    targetRef = await github('GET', `/repos/${OWNER}/${REPO}/git/ref/heads/${BRANCH}`);
+  } catch (error) {
+    if (!/HTTP 404/.test(error.message)) throw error;
+  }
+  const effectiveBase = RESET ? BASE_BRANCH : (targetRef && !BASE_EXPLICIT ? BRANCH : BASE_BRANCH);
+  if (RESET && BRANCH === 'main') throw new Error('--reset 不能用于 main');
+  const baseRef = await github('GET', `/repos/${OWNER}/${REPO}/git/ref/heads/${effectiveBase}`);
+  const baseSha = baseRef.object.sha;
   const baseCommit = await github('GET', `/repos/${OWNER}/${REPO}/git/commits/${baseSha}`);
-  console.log(`\n分支当前提交: ${baseSha.slice(0, 8)}`);
+  console.log(`\n基线 ${effectiveBase}: ${baseSha.slice(0, 8)}${RESET ? '（reset 模式）' : ''}`);
 
   // 2. 上传 blob（并发 5，避免触发二级限流）
   const treeEntries = [];
@@ -131,14 +149,14 @@ async function main() {
   });
   await Promise.all(workers);
 
-  // 3. 创建 tree（保留仓库已有文件）
+  // 3. 创建 tree（以 main 的 tree 为底，保留前端）
   const tree = await github('POST', `/repos/${OWNER}/${REPO}/git/trees`, {
     base_tree: baseCommit.tree.sha,
     tree: treeEntries,
   });
-  console.log(`\n新 tree: ${tree.sha.slice(0, 8)}，${treeEntries.length} 个文件`);
+  console.log(`\n新 tree: ${tree.sha.slice(0, 8)}，叠加 ${treeEntries.length} 个文件`);
 
-  // 4. 创建 commit
+  // 4. 创建 commit（父提交是 main，而不是旧 D 分支）
   const message = 'feat(d): 登录、用户、活动、报名、分析与 AI 解读';
   const commit = await github('POST', `/repos/${OWNER}/${REPO}/git/commits`, {
     message,
@@ -147,12 +165,20 @@ async function main() {
   });
   console.log(`新 commit: ${commit.sha.slice(0, 8)}`);
 
-  // 5. 更新分支引用
-  await github('PATCH', `/repos/${OWNER}/${REPO}/git/refs/heads/${BRANCH}`, {
-    sha: commit.sha,
-    force: false,
-  });
-  console.log(`✓ 已推送到 ${BRANCH}: ${commit.sha.slice(0, 8)}`);
+  // 5. 创建或更新集成分支
+  if (!targetRef) {
+    await github('POST', `/repos/${OWNER}/${REPO}/git/refs`, {
+      ref: `refs/heads/${BRANCH}`,
+      sha: commit.sha,
+    });
+    console.log(`✓ 已创建 ${BRANCH}: ${commit.sha.slice(0, 8)}`);
+  } else {
+    await github('PATCH', `/repos/${OWNER}/${REPO}/git/refs/heads/${BRANCH}`, {
+      sha: commit.sha,
+      force: FORCE || RESET,
+    });
+    console.log(`✓ 已${RESET ? '重置' : '更新'} ${BRANCH}: ${commit.sha.slice(0, 8)}`);
+  }
   console.log(`  https://github.com/${OWNER}/${REPO}/tree/${BRANCH}`);
 
   if (MERGE_MAIN) {

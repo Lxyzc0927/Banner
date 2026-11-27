@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+﻿# -*- coding: utf-8 -*-
 """生成 8 页答辩 PPT 草稿（骑行运营台模块）。"""
 import os
 from pathlib import Path
@@ -210,7 +210,7 @@ shot = SHOTS / "02-dashboard.png"
 add_image(s, shot, 7.0, 1.05, 5.4, 5.4, border=True)
 # 浮层小卡
 rect(s, 6.55, 5.55, 2.5, 0.82, fill=WHITE, line=None, radius=0.12)
-text(s, "29", 6.72, 5.66, 0.8, 0.42, size=22, bold=True, color=RED)
+text(s, "31", 6.72, 5.66, 0.8, 0.42, size=22, bold=True, color=RED)
 text(s, "自动化测试全部通过", 7.42, 5.7, 1.5, 0.24, size=9, bold=True, color=INK)
 text(s, "名额 / 防重 / 权限 / 漏斗", 7.42, 5.98, 1.5, 0.22, size=8, color=MUTED)
 
@@ -241,7 +241,7 @@ left_lines = [
     "活动发布、下架、报名、统计、导出",
     "模拟行为数据 + 热度 / 趋势 / 漏斗",
     "AI 解读 + 规则兜底 + 结果落库",
-    "29 个接口测试 + 后台演示控制台",
+    "31 个接口测试 + 后台演示控制台",
 ]
 for i, line in enumerate(left_lines):
     text(s, "✓  " + line, 0.94, 5.12 + i * 0.27, 5.3, 0.24, size=9.5, color=INK2)
@@ -314,7 +314,7 @@ for i, b in enumerate(bullets):
 # ============ Slide 4 数据与接口 ============
 s = prs.slides.add_slide(prs.slide_layouts[6]); bg(s)
 kicker(s, "03 · 数据与接口")
-title(s, "核心表、30 个接口，先把契约写死", "统一信封 + 错误码 + 分页 + 时间口径，前后端各写各的也不打架")
+title(s, "核心表、31 个接口，先把契约写死", "统一信封 + 错误码 + 分页 + 时间口径，前后端各写各的也不打架")
 page_number(s, 4); footer(s)
 
 # 表卡片
@@ -406,7 +406,7 @@ for i, (no, head, body, evidence, color) in enumerate(items):
 
 # 结果条
 rect(s, 0.72, 6.45, 12.0, 0.42, fill=INK, line=None, radius=0.2)
-text(s, "结果：29 个自动化用例全部通过；报名、权限、导出、漏斗、空数据、AI 兜底都有回归。", 0.95, 6.53, 11.6, 0.24, size=9.5, bold=True, color=WHITE)
+text(s, "结果：31 个自动化用例全部通过；报名、权限、导出、漏斗、空数据、AI 兜底都有回归。", 0.95, 6.53, 11.6, 0.24, size=9.5, bold=True, color=WHITE)
 
 # ============ Slide 7 AI 解读 ============
 s = prs.slides.add_slide(prs.slide_layouts[6]); bg(s)
@@ -477,3 +477,5 @@ text(s, "方法无优劣，匹配场景才是关键；把“先这样”记在�
 
 prs.save(OUT)
 print("saved", OUT, "slides", len(prs.slides))
+
+
