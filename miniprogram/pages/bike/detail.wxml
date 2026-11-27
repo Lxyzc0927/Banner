@@ -1,0 +1,66 @@
+<empty wx:if="{{error}}" text="{{error}}" action-text="看看其他车型" bind:action="goBikes" />
+
+<view wx:elif="{{!bike}}" class="wrap" aria-busy="true">
+  <view class="skeleton sk-hero"></view>
+  <view class="skeleton sk-line"></view>
+  <view class="skeleton sk-line short"></view>
+</view>
+
+<view wx:else>
+  <swiper wx:if="{{bike.images.length}}" class="gallery" indicator-dots circular indicator-active-color="#000000">
+    <swiper-item wx:for="{{bike.images}}" wx:key="*this">
+      <image class="gallery-img" src="{{item}}" mode="aspectFill" />
+    </swiper-item>
+  </swiper>
+
+  <view class="wrap head">
+    <plate cc="{{bike.cc}}" size="l" unit />
+    <view class="name">{{bike.name}}</view>
+    <view class="price-row">
+      <view class="price"><text class="yen">¥</text><text class="num">{{priceText}}</text></view>
+      <text class="price-tip">厂商指导价</text>
+    </view>
+    <!-- 点任一标签，跳到车型列表并只按这个标签筛选 -->
+    <view class="labels">
+      <view class="label" hover-class="pressed" data-type="category" data-value="{{bike.category}}" bindtap="onLabel" aria-role="link" aria-label="查看全部{{bike.category}}">
+        <text>{{bike.category}}</text>
+        <image class="icon-xs" src="/assets/icons/caret-right-bold-5a5a57.svg" aria-hidden="true" />
+      </view>
+      <view class="label" hover-class="pressed" data-type="tier" data-value="{{tierKey}}" bindtap="onLabel" aria-role="link" aria-label="查看全部{{tierLabel}}车型">
+        <view class="swatch plate-{{tierColor}}" aria-hidden="true"></view>
+        <text>{{tierLabel}}</text>
+        <image class="icon-xs" src="/assets/icons/caret-right-bold-5a5a57.svg" aria-hidden="true" />
+      </view>
+      <view wx:for="{{bike.tags}}" wx:key="*this" class="label" hover-class="pressed" data-type="tags" data-value="{{item}}" bindtap="onLabel" aria-role="link" aria-label="查看全部{{item}}车型">
+        <text>{{item}}</text>
+        <image class="icon-xs" src="/assets/icons/caret-right-bold-5a5a57.svg" aria-hidden="true" />
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">核心参数</text></view>
+    <view class="specs">
+      <view class="spec" wx:for="{{params}}" wx:key="label">
+        <text class="spec-label">{{item.label}}</text>
+        <text class="spec-value num">{{item.value}}</text>
+        <text class="spec-unit">{{item.unit}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">车型介绍</text></view>
+    <text class="desc">{{bike.desc}}</text>
+  </view>
+
+  <view class="bottom-gap"></view>
+  <view class="bottom-bar safe">
+    <view class="fav" hover-class="pressed" bindtap="onFavorite" aria-role="button" aria-label="{{bike.favorited ? '取消收藏' : '收藏'}}" aria-checked="{{bike.favorited}}">
+      <image class="icon" src="{{bike.favorited ? '/assets/icons/heart-fill-e10600.svg' : '/assets/icons/heart-bold-000000.svg'}}" aria-hidden="true" />
+      <text>{{bike.favorited ? '已收藏' : '收藏'}}</text>
+    </view>
+    <button class="btn btn-ghost grow" bindtap="onChat">问客服</button>
+    <button class="btn btn-primary grow" bindtap="goActivities">看看活动</button>
+  </view>
+</view>

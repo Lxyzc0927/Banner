@@ -1,0 +1,18 @@
+<empty wx:if="{{!loggedIn}}" text="登录后才能看到收藏的车型" action-text="去登录" bind:action="onLogin" />
+
+<block wx:else>
+  <view class="wrap">
+    <view wx:if="{{!list.length && loading}}" aria-busy="true">
+      <view class="skeleton sk-row" wx:for="{{[1, 2, 3]}}" wx:key="*this"></view>
+    </view>
+    <bike-card wx:for="{{list}}" wx:key="id" bike="{{item}}" />
+  </view>
+
+  <empty wx:if="{{empty && !loading && !error}}" text="还没有收藏车型，在车型详情页点收藏就会出现在这里" action-text="去看车型" bind:action="goBikes" />
+
+  <view class="list-foot">
+    <text wx:if="{{loading && list.length}}">加载中…</text>
+    <text wx:elif="{{error}}" class="link" bindtap="onRetry">没加载出来，点这里重试</text>
+    <text wx:elif="{{finished && !empty}}">共 {{total}} 款</text>
+  </view>
+</block>

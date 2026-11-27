@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>摩托销售管理后台</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">🏍️ 摩托销售管理后台</div>
+    <nav>
+      <a href="#" data-page="home" class="active">首页内容管理</a>
+      <a href="#" data-page="bike">车型管理</a>
+      <a href="#" data-page="activity">活动管理</a>
+      <a href="#" data-page="user">用户管理</a>
+      <a href="#" data-page="analysis">数据分析</a>
+    </nav>
+    <div class="sidebar-foot">第十组 · feature/happyltyang-code</div>
+  </aside>
+
+  <main class="main">
+    <header class="topbar">
+      <div>
+        <h1 id="page-title">首页内容管理</h1>
+        <p class="subtitle" id="page-desc">管理 Banner 图与新车资讯，新增/编辑/上下架/排序</p>
+      </div>
+      <div class="topbar-actions">
+        <span class="badge">管理员</span>
+      </div>
+    </header>
+
+    <section id="content" class="content"></section>
+  </main>
+</div>
+
+<div id="modal-root"></div>
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
