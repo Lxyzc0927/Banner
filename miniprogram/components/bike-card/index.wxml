@@ -1,9 +1,0 @@
-<view class="row" hover-class="pressed" hover-stay-time="80" bindtap="onTap">
-  <image wx:if="{{bike.cover}}" class="cover" src="{{bike.cover}}" mode="aspectFill" lazy-load />
-  <plate wx:else cc="{{bike.cc}}" />
-  <view class="info">
-    <view class="name">{{bike.name}}</view>
-    <view class="meta"><text>{{bike.category}}</text><text class="dot">{{tierLabel}}</text></view>
-  </view>
-  <view class="price"><text class="yen">¥</text><text class="num">{{priceText}}</text></view>
-</view>
