@@ -1,6 +1,10 @@
 /* 管理后台骨架：所有交互演示版，接口就绪后把 DB 换成后端数据 */
 const state = { page: 'home', keyword: '', pageNo: 1, pageSize: 8, editId: null };
 let pendingImage = null;
+/* 弹窗会话号：每次打开弹窗 +1，用于作废旧弹窗未完成的异步读取，防止图片串到另一条记录 */
+let modalSession = 0;
+/* 当前弹窗是否正在读取图片，读取期间禁用保存，避免丢图 */
+let imageReading = false;
 
 const PAGE_META = {
   home: { title: '首页内容管理', desc: '管理 Banner 图与新车资讯，新增/编辑/上下架/排序' },
@@ -87,7 +91,10 @@ function searchBar(placeholder, extra = '') {
 /* 首页内容管理 */
 function homeList() {
   const kw = state.keyword.toLowerCase();
-  const list = DB.banners.filter(b => !kw || b.title.toLowerCase().includes(kw));
+  const list = DB.banners
+    .filter(b => !kw || b.title.toLowerCase().includes(kw))
+    .slice()
+    .sort((a, b) => a.sort - b.sort || a.id - b.id);   // 先按 sort 升序，同序号按 id 兜底，再分页
   clampPage(list.length);
   const rows = pageSlice(list).map(b => `<tr>
     <td>${b.id}</td><td>${esc(b.title)}</td>
@@ -129,12 +136,14 @@ function activityList() {
   const list = DB.activities.filter(a => !kw || a.name.toLowerCase().includes(kw));
   clampPage(list.length);
   const rows = pageSlice(list).map(a => {
-    const tagClass = a.status === '进行中' ? 'tag-on' : a.status === '未开始' ? 'tag-warn' : 'tag-off';
+    const tagClass = a.status === '进行中' ? 'tag-on' : (a.status === '未开始' || a.status === '已下架') ? 'tag-warn' : 'tag-off';
     const op = a.status === '未开始'
       ? `<button class="small" onclick="toggleActivity(${a.id})">发布</button>`
       : a.status === '进行中'
         ? `<button class="small" onclick="toggleActivity(${a.id})">下架</button>`
-        : `<span style="color:#aaa">—</span>`;
+        : a.status === '已下架'
+          ? `<button class="small" onclick="toggleActivity(${a.id})">重新发布</button>`
+          : `<span style="color:#aaa">—</span>`;
     return `<tr><td>${a.id}</td><td>${esc(a.name)}</td><td>${a.date}</td><td>${a.signup}/${a.quota}</td>
       <td><span class="tag ${tagClass}">${a.status}</span></td>
       <td>${op}<button class="small" onclick="exportSignups(${a.id})">导出名单</button></td></tr>`;
@@ -144,11 +153,12 @@ function activityList() {
 function renderActivity() {
   paint(searchBar('搜索活动名称…', `<button class="primary" onclick="toast('活动发布表单：接入 POST /api/activities')">+ 发布活动</button>`), activityList());
 }
-/* 发布/下架是两个动作，"已结束"由时间决定，不由下架按钮产生 */
+/* 发布/下架/重新发布三个动作；"已结束"由时间决定，不提供人工操作 */
 function toggleActivity(id) {
   const a = DB.activities.find(x => x.id === id);
   if (a.status === '未开始') { a.status = '进行中'; toast('活动已发布'); }
   else if (a.status === '进行中') { a.status = '已下架'; toast('活动已下架'); }
+  else if (a.status === '已下架') { a.status = '进行中'; toast('活动已重新发布'); }
   else return;
   refreshList();
 }
@@ -196,26 +206,49 @@ function renderAnalysis() {
 }
 
 /* 弹窗表单：校验 + 二次确认 */
-function openModal(html) { q('#modal-root').innerHTML = `<div class="mask"><div class="modal">${html}</div></div>`; }
-function closeModal() { q('#modal-root').innerHTML = ''; pendingImage = null; }
+function openModal(html) {
+  modalSession += 1;
+  q('#modal-root').innerHTML = `<div class="mask"><div class="modal">${html}</div></div>`;
+}
+function closeModal() {
+  modalSession += 1;   // 使在途的 FileReader 回调失效
+  pendingImage = null;
+  imageReading = false;
+  q('#modal-root').innerHTML = '';
+}
 
-/* 图片本地预览：选文件后读取为 dataURL，保存时随记录暂存；接上传接口后改成先传文件拿 URL */
+/* 图片本地预览：读取结果只写回发起它的那次弹窗；关闭弹窗后旧回调被会话号拦截 */
 function previewImage(input) {
   const f = input.files && input.files[0];
   if (!f) return;
   if (!/^image\//.test(f.type)) { toast('请选择图片文件'); input.value = ''; return; }
   if (f.size > 2 * 1024 * 1024) { toast('图片不能超过 2MB'); input.value = ''; return; }
+  const session = modalSession;   // 锁定发起读取的弹窗会话
+  imageReading = true;
+  const saveBtn = q('#btn-save');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '读取中…'; }
   const reader = new FileReader();
   reader.onload = () => {
+    if (session !== modalSession) return;   // 弹窗已关闭或换了新弹窗，丢弃旧结果
     pendingImage = reader.result;
     const p = q('#f-preview');
     if (p) { p.src = reader.result; p.style.display = 'block'; }
+    imageReading = false;
+    const btn = q('#btn-save');
+    if (btn) { btn.disabled = false; btn.textContent = '保存'; }
+  };
+  reader.onerror = () => {
+    if (session !== modalSession) return;
+    imageReading = false;
+    toast('图片读取失败，请重试');
+    const btn = q('#btn-save');
+    if (btn) { btn.disabled = false; btn.textContent = '保存'; }
   };
   reader.readAsDataURL(f);
 }
 
 function openBannerModal(id = null) {
-  state.editId = id; pendingImage = null;
+  state.editId = id; pendingImage = null; imageReading = false;
   const b = id ? DB.banners.find(x => x.id === id) : { title: '', image: '', link: '', sort: nextSort(DB.banners) };
   openModal(`<h3>${id ? '编辑' : '新增'} Banner</h3>
     <div class="form-row"><label>标题 *</label><input id="f-title" value="${esc(b.title)}"><div class="err" id="e-title"></div></div>
@@ -224,9 +257,10 @@ function openBannerModal(id = null) {
       <img id="f-preview" src="${esc(b.image || '')}" alt="预览" style="display:${b.image ? 'block' : 'none'};max-width:100%;max-height:120px;margin-top:8px;border-radius:6px"></div>
     <div class="form-row"><label>跳转链接</label><input id="f-link" value="${esc(b.link)}"></div>
     <div class="form-row"><label>排序（正整数）</label><input type="number" step="1" id="f-sort" value="${b.sort}"><div class="err" id="e-sort"></div></div>
-    <div class="modal-actions"><button onclick="closeModal()">取消</button><button class="primary" onclick="saveBanner()">保存</button></div>`);
+    <div class="modal-actions"><button onclick="closeModal()">取消</button><button class="primary" id="btn-save" onclick="saveBanner()">保存</button></div>`);
 }
 function saveBanner() {
+  if (imageReading) { toast('图片还在读取中，请稍候'); return; }
   clearErrors();
   const title = q('#f-title').value.trim(), sortRaw = q('#f-sort').value, sortNum = Number(sortRaw);
   let ok = true;
