@@ -211,7 +211,7 @@ Page({
       const t = d.tagDraft
       api.getBikes({
         keyword: d.keyword.trim(), cc: d.cc || '', minPrice: d.minPrice, maxPrice: d.maxPrice,
-        category: t.category, tier: t.tier, tags: t.tags.join(','), pageNo: 1, pageSize: 1
+        category: t.category, tier: t.tier, tags: t.tags.join(','), page: 1, pageSize: 1
       }, { silent: true }).then(res => {
         if (seq === this._previewSeq) this.setData({ previewTotal: res.total })
       }, () => { if (seq === this._previewSeq) this.setData({ previewTotal: -1 }) })

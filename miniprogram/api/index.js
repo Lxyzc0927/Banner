@@ -1,11 +1,18 @@
-/* 接口清单：路径与参数见 miniprogram/README.md，需与后端接口文档保持一致 */
+/*
+ * 接口清单：路径与参数见 miniprogram/README.md。
+ * 登录、手机号、活动、报名按 D 模块（origin/feature/lumenh26）实际接口；
+ * 车型、首页、收藏、智能客服、埋点等接口尚待后端提供，暂只有 mock 实现。
+ * 分页参数统一为 page / pageSize，返回 { list, total, page, pageSize }。
+ */
 const request = require('../utils/request')
 
 module.exports = {
   // 登录与用户
-  wxLogin: code => request({ url: '/api/auth/wx-login', method: 'POST', data: { code }, loading: '登录中' }),
-  bindPhone: code => request({ url: '/api/auth/phone', method: 'POST', data: { code }, loading: true }),
-  getMe: () => request({ url: '/api/user/me', silent: true }),
+  wxLogin: code => request({ url: '/api/auth/wechat/login', method: 'POST', data: { code }, loading: '登录中' }),
+  // 返回 { user, changed }
+  bindPhone: code => request({ url: '/api/auth/wechat/phone', method: 'POST', data: { code }, loading: true }),
+  // 返回 { user }
+  getMe: () => request({ url: '/api/users/me', silent: true }),
 
   // 首页
   getHome: () => request({ url: '/api/home' }),
@@ -20,10 +27,12 @@ module.exports = {
   getFavorites: params => request({ url: '/api/favorites', data: params }),
 
   // 活动与报名
+  // params：page、pageSize、keyword、includeEnded（true 时包含已结束活动）
   getActivities: params => request({ url: '/api/activities', data: params }),
   getActivity: (id, opts) => request(Object.assign({ url: `/api/activities/${id}` }, opts)),
+  // data：{ remark }（选填）；返回 { signup, activity }
   signup: (id, data) => request({ url: `/api/activities/${id}/signup`, method: 'POST', data, loading: '提交中' }),
-  getMySignups: params => request({ url: '/api/signups/mine', data: params }),
+  getMySignups: params => request({ url: '/api/users/me/signups', data: params }),
 
   // 智能客服（大模型响应慢，单独放宽超时）
   chat: data => request({ url: '/api/chat', method: 'POST', data, timeout: 60000 }),

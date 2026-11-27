@@ -1,6 +1,6 @@
 <view class="wrap header">
   <block wx:if="{{user}}">
-    <image wx:if="{{user.avatar}}" class="avatar" src="{{user.avatar}}" mode="aspectFill" />
+    <image wx:if="{{user.avatarUrl}}" class="avatar" src="{{user.avatarUrl}}" mode="aspectFill" />
     <view wx:else class="plate plate-white avatar-plate" aria-hidden="true">骑</view>
     <view class="who">
       <view class="nick">{{user.nickname}}</view>

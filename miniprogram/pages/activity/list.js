@@ -1,28 +1,18 @@
 const api = require('../../api/index')
 const list = require('../../utils/list')
-const format = require('../../utils/format')
+const activity = require('../../utils/activity')
 const track = require('../../utils/track')
 
-// 状态值与管理后台一致：进行中 / 已结束
+// 后端 C 端活动列表只支持 includeEnded（默认不含已结束），没有按状态筛选的参数
 const TABS = [
-  { label: '全部', value: '' },
-  { label: '报名中', value: '进行中' },
-  { label: '已结束', value: '已结束' }
+  { label: '近期活动', value: '' },
+  { label: '含已结束', value: 'true' }
 ]
 
-function decorate(a) {
-  const ended = a.status === '已结束'
-  return Object.assign({}, a, {
-    percent: format.percent(a.signup, a.quota),
-    stateText: ended ? '已结束' : a.full ? '名额已满' : a.signed ? '已报名' : '报名中',
-    stateClass: ended ? 'state-ended' : a.full ? 'state-full' : a.signed ? 'state-signed' : 'state-open',
-    open: !ended && !a.full,
-    left: Math.max(0, a.quota - a.signup)
-  }, format.dateParts(a.date))
-}
+function decorate(a) { return activity.view(a) }
 
 Page({
-  data: Object.assign(list.initialState(), { tabs: TABS, status: '' }),
+  data: Object.assign(list.initialState(), { tabs: TABS, includeEnded: '' }),
 
   onLoad() { this.refresh() },
   onShow() {
@@ -32,20 +22,19 @@ Page({
     this._loaded = true
   },
   onPullDownRefresh() { this.refresh().then(() => wx.stopPullDownRefresh()) },
-  onReachBottom() { list.load(this, p => this.fetch(p), { map: decorate }) },
+  onReachBottom() { this.loadMore() },
 
-  fetch(page) { return api.getActivities(Object.assign({ status: this.data.status }, page)) },
+  fetch(page) { return api.getActivities(Object.assign({ includeEnded: this.data.includeEnded }, page)) },
   refresh() { return list.load(this, p => this.fetch(p), { reset: true, map: decorate }) },
+  // 首屏失败后 list.load 会自动从第一页重来
+  loadMore() { return list.load(this, p => this.fetch(p), { map: decorate }) },
 
   onTab(e) {
-    const status = e.currentTarget.dataset.value
-    if (status === this.data.status) return
-    this.setData({ status })
+    const includeEnded = e.currentTarget.dataset.value
+    if (includeEnded === this.data.includeEnded) return
+    this.setData({ includeEnded })
     this.refresh()
   },
-  onRetry() {
-    if (this.data.list.length) this.onReachBottom()
-    else this.refresh()
-  },
+  onRetry() { this.loadMore() },
   open(e) { wx.navigateTo({ url: `/pages/activity/detail?id=${e.currentTarget.dataset.id}` }) }
 })

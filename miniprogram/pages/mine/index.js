@@ -10,11 +10,18 @@ Page({
     track('view', { module: 'mine' })
     this.setData({ user: session.getUser() })
     if (!session.isLoggedIn()) return
+    const seq = (this._profileSeq || 0) + 1
+    this._profileSeq = seq
+    const revision = session.getRevision()
     // 刷新用户信息；token 失效时 request 会静默清掉登录态
-    api.getMe().then(user => {
+    api.getMe().then(res => {
+      if (seq !== this._profileSeq || revision !== session.getRevision()) return
+      const user = res.user
       session.setUser(user)
       this.setData({ user })
-    }, () => this.setData({ user: session.getUser() }))
+    }, () => {
+      if (seq === this._profileSeq) this.setData({ user: session.getUser() })
+    })
   },
 
   onLogin() {
@@ -23,6 +30,8 @@ Page({
 
   onPhone(e) {
     auth.bindPhone(e.detail).then(user => {
+      // 先前发出的资料请求可能还没有包含新绑定的手机号。
+      this._profileSeq = (this._profileSeq || 0) + 1
       this.setData({ user })
       wx.showToast({ title: '绑定成功', icon: 'success' })
     }).catch(() => {})

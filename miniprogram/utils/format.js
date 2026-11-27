@@ -26,11 +26,21 @@ function ccOfName(name) {
   return m ? Number(m[1]) : 0
 }
 
-// 「2026-11-28 08:30」→ { month: 11, day: '28', time: '08:30' }
+// 后端时间是 UTC ISO（如 2026-11-28T00:30:00.000Z），展示前转成本地「2026-11-28 08:30」
+function dateTime(value) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (isNaN(d.getTime())) return String(value)
+  const p = n => (n < 10 ? '0' + n : String(n))
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+// 「2026-11-28 08:30」或 UTC ISO → { month: 11, day: '28', time: '08:30' }（本地时间）
 function dateParts(text) {
+  if (/T/.test(String(text || ''))) text = dateTime(text)
   const m = String(text || '').match(/^\d{4}-(\d{2})-(\d{2})(?:\s+(\d{2}:\d{2}))?/)
   if (!m) return { month: '', day: '', time: '' }
   return { month: Number(m[1]), day: m[2], time: m[3] || '' }
 }
 
-module.exports = { price, percent, tier, tierByKey, TIERS, ccOfName, dateParts }
+module.exports = { price, percent, tier, tierByKey, TIERS, ccOfName, dateTime, dateParts }

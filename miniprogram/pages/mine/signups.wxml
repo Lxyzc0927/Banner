@@ -6,18 +6,18 @@
       <view class="skeleton sk-row" wx:for="{{[1, 2, 3]}}" wx:key="*this"></view>
     </view>
 
-    <view wx:for="{{list}}" wx:key="id" class="row {{item.status === '已结束' ? 'ended' : ''}}" hover-class="pressed" data-id="{{item.activityId}}" bindtap="open">
-      <view class="plate date {{item.status === '已结束' ? 'plate-white' : 'plate-yellow'}}">
+    <view wx:for="{{list}}" wx:key="id" class="row {{item.dim ? 'ended' : ''}}" hover-class="pressed" data-id="{{item.activityId}}" bindtap="open">
+      <view class="plate date {{item.dim ? 'plate-white' : 'plate-yellow'}}">
         <text class="day">{{item.day}}</text>
         <text class="month">{{item.month}}月</text>
       </view>
       <view class="info">
         <view class="title-row">
           <text class="title">{{item.title}}</text>
-          <text class="state {{item.status === '已结束' ? 'state-ended' : 'state-signed'}}">{{item.status === '已结束' ? '已结束' : '待参加'}}</text>
+          <text class="state {{item.stateClass}}">{{item.stateText}}</text>
         </view>
-        <view class="meta"><text class="num">{{item.time}}</text><text class="place">{{item.place}}</text></view>
-        <view class="meta">报名人 {{item.name}}<text class="num phone">{{item.phone}}</text></view>
+        <view class="meta"><text class="num">{{item.time}}</text><text class="place">{{item.location}}</text></view>
+        <view class="meta">报名编号 <text class="num">{{item.signupNo}}</text><text class="num phone">{{item.phone}}</text></view>
         <view class="meta light">报名于 <text class="num">{{item.createdText}}</text></view>
       </view>
     </view>

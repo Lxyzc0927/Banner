@@ -3,6 +3,7 @@ const auth = require('../../utils/auth')
 const nav = require('../../utils/nav')
 const track = require('../../utils/track')
 const format = require('../../utils/format')
+const activityView = require('../../utils/activity')
 
 // Banner 上的动作文字跟着跳转目标走
 function goTextOf(link) {
@@ -17,11 +18,9 @@ function plateOf(link) {
   if (!m) return Promise.resolve(null)
   const id = Number(m[2])
   if (m[1] === 'activity') {
-    return api.getActivity(id, { silent: true }).then(a => {
-      const d = format.dateParts(a.date)
-      const left = Math.max(0, a.quota - a.signup)
-      const note = a.status === '已结束' ? '活动已结束' : a.full ? '名额已满' : `还剩 ${left} 个名额`
-      return { big: d.day, unit: `${d.month}月`, line: `${a.title}，${note}`, color: 'yellow' }
+    return api.getActivity(id, { silent: true }).then(raw => {
+      const a = activityView.view(raw)
+      return { big: a.day, unit: `${a.month}月`, line: `${a.title}，${a.note}`, color: 'yellow' }
     }, () => null)
   }
   return api.getBike(id, { silent: true }).then(b => ({
@@ -46,23 +45,29 @@ Page({
   onShow() { track('view', { module: 'home' }) },
   onPullDownRefresh() { this.load().then(() => wx.stopPullDownRefresh()) },
 
+  // 连续下拉刷新时，每次加载拿一个序号；迟到的旧结果（含 Banner 装饰、在售总数）一律丢弃
   load() {
+    const seq = (this._loadSeq || 0) + 1
+    this._loadSeq = seq
     return api.getHome().then(res => {
+      if (seq !== this._loadSeq) return
       const banners = res.banners.map(b => Object.assign({}, b, { goText: goTextOf(b.link) }))
       this.setData({ banners, news: res.news, hotBikes: res.hotBikes, loading: false, error: false })
-      this.decorate(banners)
+      this.decorate(banners, seq)
     }, () => {
+      if (seq !== this._loadSeq) return
       this.setData({ loading: false, error: true })
     })
   },
 
   // 补充信息都是静默请求，失败不影响首页主体
-  decorate(banners) {
+  decorate(banners, seq) {
+    const current = () => seq === this._loadSeq
     banners.forEach((b, i) => {
-      plateOf(b.link).then(plate => { if (plate) this.setData({ [`banners[${i}].plate`]: plate }) })
+      plateOf(b.link).then(plate => { if (plate && current()) this.setData({ [`banners[${i}].plate`]: plate }) })
     })
-    api.getBikes({ pageNo: 1, pageSize: 1 }, { silent: true })
-      .then(res => this.setData({ onSale: res.total }), () => {})
+    api.getBikes({ page: 1, pageSize: 1 }, { silent: true })
+      .then(res => { if (current()) this.setData({ onSale: res.total }) }, () => {})
   },
 
   onRetry() {

@@ -36,7 +36,7 @@ Page({
       wx.setNavigationBarTitle({ title: bike.name })
       this.setData({ bike, priceText: format.price(bike.price), params: paramsOf(bike), tierLabel: format.tier(bike.cc).label, tierKey: format.tier(bike.cc).key, tierColor: format.tier(bike.cc).color, error: '' })
     }, err => {
-      this.setData({ error: err.msg || '加载失败' })
+      this.setData({ error: err.message || '加载失败' })
     })
   },
 

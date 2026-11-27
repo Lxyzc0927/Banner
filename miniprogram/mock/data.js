@@ -48,14 +48,33 @@ const news = [
   { id: 3, title: '门店公告：周末延长营业', summary: '12 月起周末营业时间调整为 9:00–20:00。', status: '下架', date: '2026-11-10' }
 ]
 
-// 状态值与后台一致："未开始" 为未发布，小程序不展示
+// 活动：字段与 D 模块后端一致（时间为 UTC ISO，status 为 draft | published | offline）。
+// 时间相对今天生成，演示数据不会过期；signupCount 是其他用户的报名基数，本机报名另算。
+function at(days, hm) {
+  const d = new Date()
+  d.setDate(d.getDate() + days)
+  d.setHours(Number(hm.slice(0, 2)), Number(hm.slice(3, 5)), 0, 0)
+  return d.toISOString()
+}
 const activities = [
-  { id: 1, title: '秋季骑行拉力赛', date: '2026-11-28 08:30', place: '城西郊野公园东门集合', quota: 50, signup: 42, status: '进行中', desc: '全程约 80 公里，含山路与乡道，需自备车辆与全盔。完赛赠送纪念徽章。' },
-  { id: 2, title: '新手安全驾驶培训', date: '2026-12-02 14:00', place: 'XX 摩托旗舰店培训场', quota: 30, signup: 18, status: '进行中', desc: '持证教练讲解基础操控、紧急制动与过弯技巧，现场提供培训车辆与护具。' },
-  { id: 3, title: '摩托车文化节', date: '2026-12-10 10:00', place: '市会展中心 3 号馆', quota: 100, signup: 0, status: '未开始', desc: '新车展示、改装车评比与骑行装备市集。' },
-  { id: 4, title: '冬季保养讲座', date: '2026-11-15 19:00', place: 'XX 摩托旗舰店二楼', quota: 25, signup: 25, status: '已结束', desc: '讲解冬季机油选择、电瓶养护与防冻要点。' },
-  { id: 5, title: '城市巡游活动', date: '2026-12-20 09:00', place: '市民广场南侧', quota: 60, signup: 8, status: '进行中', desc: '车友集体巡游城市主干道，全程交警协同，结束后合影留念。' },
-  { id: 6, title: '新车品鉴会', date: '2026-12-06 15:00', place: 'XX 摩托旗舰店', quota: 20, signup: 20, status: '进行中', desc: '风行 300 静态品鉴与产品经理答疑，到场即送骑行手套。' }
+  { id: 1, title: '秋季骑行拉力赛', location: '城西郊野公园东门集合', quota: 50, signupCount: 42, status: 'published',
+    startAt: at(1, '08:30'), endAt: at(1, '17:00'), signupStartAt: at(-10, '09:00'), signupEndAt: at(1, '07:00'),
+    description: '全程约 80 公里，含山路与乡道，需自备车辆与全盔。完赛赠送纪念徽章。' },
+  { id: 2, title: '新手安全驾驶培训', location: 'XX 摩托旗舰店培训场', quota: 30, signupCount: 18, status: 'published',
+    startAt: at(5, '14:00'), endAt: at(5, '17:00'), signupStartAt: at(-7, '09:00'), signupEndAt: at(4, '20:00'),
+    description: '持证教练讲解基础操控、紧急制动与过弯技巧，现场提供培训车辆与护具。' },
+  { id: 3, title: '摩托车文化节', location: '市会展中心 3 号馆', quota: 100, signupCount: 0, status: 'draft',
+    startAt: at(13, '10:00'), endAt: at(13, '18:00'), signupStartAt: at(3, '09:00'), signupEndAt: at(12, '20:00'),
+    description: '新车展示、改装车评比与骑行装备市集。' },
+  { id: 4, title: '冬季保养讲座', location: 'XX 摩托旗舰店二楼', quota: 25, signupCount: 25, status: 'published',
+    startAt: at(-12, '19:00'), endAt: at(-12, '21:00'), signupStartAt: at(-25, '09:00'), signupEndAt: at(-13, '20:00'),
+    description: '讲解冬季机油选择、电瓶养护与防冻要点。' },
+  { id: 5, title: '城市巡游活动', location: '市民广场南侧', quota: 60, signupCount: 8, status: 'published',
+    startAt: at(23, '09:00'), endAt: at(23, '12:00'), signupStartAt: at(3, '09:00'), signupEndAt: at(22, '20:00'),
+    description: '车友集体巡游城市主干道，全程交警协同，结束后合影留念。报名 3 天后开放。' },
+  { id: 6, title: '新车品鉴会', location: 'XX 摩托旗舰店', quota: 20, signupCount: 20, status: 'published',
+    startAt: at(9, '15:00'), endAt: at(9, '17:00'), signupStartAt: at(-5, '09:00'), signupEndAt: at(8, '20:00'),
+    description: '风行 300 静态品鉴与产品经理答疑，到场即送骑行手套。' }
 ]
 
 module.exports = { CATEGORIES, CC_LIST, bikes, banners, news, activities }

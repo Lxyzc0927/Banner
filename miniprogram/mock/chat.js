@@ -3,6 +3,7 @@
  * 真实版本由后端调用大模型实现，返回结构保持一致：{ reply, bikes: [{ id, name, price }] }
  */
 const { CATEGORIES } = require('./data')
+const { dateTime: dateText } = require('../utils/format')
 
 const RESET_WORDS = /重新|重来|换个|清空/
 const NEWBIE_WORDS = /新手|入门|第一台|女生|练手/
@@ -51,9 +52,10 @@ function reply(messages, bikes, activities) {
   if (resetAt > -1) userTexts = userTexts.slice(resetAt)
 
   if (/活动|报名|试驾会/.test(last) && !findBike(last, bikes)) {
-    const open = activities.filter(a => a.status === '进行中')
+    // activities 为后端字段结构，只推荐正在报名且还有名额的
+    const open = activities.filter(a => a.signupOpen && a.remaining > 0)
     if (!open.length) return { reply: '近期暂无可报名的活动，可以关注首页公告。', bikes: [] }
-    return { reply: '近期可报名的活动：\n' + open.map(a => `· ${a.title}（${a.date}，${a.place}）`).join('\n') + '\n可在「活动」页报名。', bikes: [] }
+    return { reply: '近期可报名的活动：\n' + open.map(a => `· ${a.title}（${dateText(a.startAt)}，${a.location}）`).join('\n') + '\n可在「活动」页报名。', bikes: [] }
   }
 
   // 问到具体车型：在当前句或上文里找车型

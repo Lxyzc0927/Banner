@@ -1,28 +1,24 @@
 const api = require('../../api/index')
 const auth = require('../../utils/auth')
 const session = require('../../utils/session')
-const format = require('../../utils/format')
+const activityView = require('../../utils/activity')
 const track = require('../../utils/track')
 
-// 报名接口业务错误码（与后端约定）：需要刷新详情以展示最新状态
-const REFRESH_CODES = [4001, 4002, 4003]
-
-function buttonOf(a) {
-  if (a.status === '已结束') return { text: '活动已结束', disabled: true }
-  if (a.signed) return { text: '已报名，期待您的到来', disabled: true }
-  if (a.full) return { text: '名额已满', disabled: true }
-  return { text: '立即报名', disabled: false }
-}
+// 报名接口业务错误码（D 模块）：活动状态已变化，关掉表单并刷新详情
+//   1002 不在报名时间 / 已结束  1003 名额已满  1004 已报名  1005 未发布 / 已下架  404 活动不存在
+const REFRESH_CODES = [1002, 1003, 1004, 1005, 404]
+const PHONE_REQUIRED = 1010
+const USER_DISABLED = 1008
 
 Page({
   data: {
     activity: null,
-    percent: 0,
     button: { text: '', disabled: true },
     error: '',
     sheet: false,
-    form: { name: '' },
-    errors: { name: '', phone: '' },
+    // 后端报名只收手机号（来自授权）和选填备注，不再收姓名
+    form: { remark: '' },
+    errors: { phone: '' },
     user: null,
     submitting: false
   },
@@ -34,20 +30,19 @@ Page({
   },
 
   load() {
-    return api.getActivity(this.id).then(activity => {
+    const seq = (this._loadSeq || 0) + 1
+    this._loadSeq = seq
+    return api.getActivity(this.id).then(raw => {
+      if (seq !== this._loadSeq) return this.data.activity
+      const activity = activityView.view(raw)
       this.setData({
         activity,
-        percent: format.percent(activity.signup, activity.quota),
-        button: buttonOf(activity),
-        // 号码牌在报名中、已报名时为黄色
-        open: activity.status !== '已结束' && (!activity.full || activity.signed),
-        parts: format.dateParts(activity.date),
-        left: Math.max(0, activity.quota - activity.signup),
+        button: activityView.button(activity),
         error: ''
       })
       return activity
     }, err => {
-      this.setData({ error: err.msg || '加载失败' })
+      if (seq === this._loadSeq) this.setData({ error: err.message || '加载失败' })
       throw err
     })
   },
@@ -60,16 +55,15 @@ Page({
       // 刚登录需要重新拉详情，判断是否已经报过名
       .then(() => (wasLoggedIn ? this.data.activity : this.load()))
       .then(activity => {
-        if (buttonOf(activity).disabled) return
-        const user = session.getUser()
-        this.setData({ sheet: true, user, 'form.name': this.data.form.name || (wx.getStorageSync('signup_name') || '') })
+        if (activityView.button(activity).disabled) return
+        this.setData({ sheet: true, user: session.getUser(), errors: { phone: '' } })
       })
       .catch(() => {})
   },
 
-  closeSheet() { this.setData({ sheet: false, errors: { name: '', phone: '' } }) },
+  closeSheet() { this.setData({ sheet: false, errors: { phone: '' } }) },
   noop() {},
-  onName(e) { this.setData({ 'form.name': e.detail.value, 'errors.name': '' }) },
+  onRemark(e) { this.setData({ 'form.remark': e.detail.value }) },
 
   onPhone(e) {
     auth.bindPhone(e.detail).then(user => this.setData({ user, 'errors.phone': '' })).catch(() => {})
@@ -77,25 +71,26 @@ Page({
 
   submit() {
     if (this.data.submitting) return
-    const name = this.data.form.name.trim()
-    // 错误写在对应字段下方，同时 toast 提示
-    const errors = {
-      name: name.length < 2 || name.length > 20 ? '请填写 2–20 个字的姓名' : '',
-      phone: !this.data.user || !this.data.user.phone ? '点上面的按钮授权手机号' : ''
-    }
-    if (errors.name || errors.phone) {
-      this.setData({ errors })
-      return wx.showToast({ title: errors.name || '请先授权手机号', icon: 'none' })
+    // 手机号以服务端为准；这里只拦明显没授权的情况，错误写在字段下方
+    if (!this.data.user || !this.data.user.phone) {
+      this.setData({ 'errors.phone': '点上面的按钮授权手机号' })
+      return wx.showToast({ title: '请先授权手机号', icon: 'none' })
     }
 
     this.setData({ submitting: true })
-    api.signup(this.id, { name }).then(() => {
-      wx.setStorageSync('signup_name', name)
+    api.signup(this.id, { remark: this.data.form.remark.trim() }).then(res => {
       track('signup_success', { activityId: this.id })
-      this.setData({ sheet: false })
+      this.setData({ sheet: false, 'form.remark': '' })
       wx.showToast({ title: '报名成功', icon: 'success' })
-      return this.load()
+      return this.load().then(() => res)
     }, err => {
+      if (err.code === PHONE_REQUIRED) {
+        // 服务端认为没有手机号：清掉本地缓存的手机号，让用户重新授权
+        const user = Object.assign({}, session.getUser(), { phone: null })
+        session.setUser(user)
+        return this.setData({ user, 'errors.phone': '请先授权手机号' })
+      }
+      if (err.code === USER_DISABLED) return this.setData({ sheet: false, user: null })
       if (REFRESH_CODES.indexOf(err.code) > -1) {
         this.setData({ sheet: false })
         return this.load()

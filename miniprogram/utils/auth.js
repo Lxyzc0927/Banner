@@ -8,8 +8,8 @@ function toast(msg) { wx.showToast({ title: msg, icon: 'none' }) }
 function getLoginCode() {
   return new Promise((resolve, reject) => {
     wx.login({
-      success: res => (res.code ? resolve(res.code) : reject({ msg: '微信登录失败' })),
-      fail: () => reject({ msg: '微信登录失败' })
+      success: res => (res.code ? resolve(res.code) : reject({ message: '微信登录失败' })),
+      fail: () => reject({ message: '微信登录失败' })
     })
   })
 }
@@ -17,7 +17,7 @@ function getLoginCode() {
 // wx.login 取 code → 后端换 token
 function login() {
   return getLoginCode()
-    .catch(err => { toast(err.msg); throw err })
+    .catch(err => { toast(err.message); throw err })
     .then(code => api.wxLogin(code))
     .then(res => {
       session.save(res.token, res.user)
@@ -47,8 +47,11 @@ function bindPhone(detail) {
     }
     code = 'mock-phone-code'
   }
+  const revision = session.getRevision()
   return api.bindPhone(code).then(res => {
-    const user = Object.assign({}, session.getUser(), { phone: res.phone })
+    // 授权结果只能更新发起请求时的登录会话。
+    if (revision !== session.getRevision()) throw { code: 'STALE_SESSION' }
+    const user = Object.assign({}, session.getUser(), res.user)
     session.setUser(user)
     return user
   })

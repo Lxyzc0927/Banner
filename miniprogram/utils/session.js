@@ -4,19 +4,23 @@ const USER_KEY = 'user'
 const LOGIN_PAGE = 'pages/login/index'
 
 let waiters = []
+let revision = 0
 
 function getToken() { return wx.getStorageSync(TOKEN_KEY) || '' }
 function getUser() { return wx.getStorageSync(USER_KEY) || null }
 function isLoggedIn() { return !!getToken() }
+function getRevision() { return revision }
 
 function save(token, user) {
   wx.setStorageSync(TOKEN_KEY, token)
   wx.setStorageSync(USER_KEY, user)
+  revision += 1
 }
 function setUser(user) { wx.setStorageSync(USER_KEY, user) }
 function clear() {
   wx.removeStorageSync(TOKEN_KEY)
   wx.removeStorageSync(USER_KEY)
+  revision += 1
 }
 
 // 登录页关闭时调用：登录成功则继续等待中的操作，否则全部取消
@@ -38,4 +42,4 @@ function goLogin() {
   })
 }
 
-module.exports = { getToken, getUser, isLoggedIn, save, setUser, clear, settle, goLogin }
+module.exports = { getToken, getUser, isLoggedIn, getRevision, save, setUser, clear, settle, goLogin }
