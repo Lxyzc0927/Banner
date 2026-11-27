@@ -1,6 +1,6 @@
 # 「摩托销售管理系统」接口契约 v1.3
 
-> 定稿日期：2026.11.25；v1.3 更新：11.29 按 D（刘昊）实际实现修订手机号授权、后台登录、用户状态、活动报名与数据分析契约。
+> 定稿日期：2026.11.25；v1.3 更新：11.29 按 D（刘昊）实际实现修订手机号授权、后台登录、用户状态、活动报名与数据分析契约；11.29 二次修正：分析路径为 `modules` / `interpret`，活动新增必填报名窗口字段 `signup_start_at` / `signup_end_at`。
 > 此后任何改动必须先改本文档，再改代码，口头约定一律无效。
 > 责任人（对应四人分工表）：
 > 任务1 = 组长兼小程序前端（李端）
@@ -99,7 +99,7 @@
 |---|---|---|---|
 | admin_user | id, username, password_hash, nickname, role(super_admin/operator), status, created_at | 后台账号表，哈希存密码，绝不存明文 | 任务4（刘昊） |
 | c_user | id, openid(唯一索引), nickname, phone, status(active/disabled), created_at | C 端用户表；手机号授权后回填 | 任务4（刘昊） |
-| activity | id, title, cover, content, start_at, end_at, quota, status(draft/published/offline), 报名时间窗字段, created_at | 独立报名时间窗；发布/下架走 status | 任务4（刘昊） |
+| activity | id, title, cover, content, start_at, end_at, signup_start_at, signup_end_at, quota, status(draft/published/offline), created_at | 活动时间与报名时间窗独立；发布/下架走 status | 任务4（刘昊） |
 | signup | id, activity_id, user_id, phone, remark, is_valid, created_at | 报名只存可选 remark；手机号从 c_user 带入；**仅对有效报名防重**，取消后可重新报名 | 任务4（刘昊） |
 | mock_visit | id, module, pv, uv, date, created_at | 数据分析模拟数据，灌 30 天 | 任务4（刘昊） |
 | banner | id, title, image, link_type, link_url, sort, status | status 控制上下架；sort 排序 | 任务3（秦旭） |
@@ -184,7 +184,7 @@
 | 在线报名 | POST /api/activities/:id/signup | {remark}（可选备注）——**手机号从已授权账户自动读取，不由前端传** | — | 401/1002/1003/1004/1005 |
 | 我的报名列表 | GET /api/users/me/signups | page/pageSize | total+list:{activity_id, title, start_at, created_at, remark} | 401 |
 | 活动列表（管理） | GET /api/admin/activities | page/pageSize/keyword/status | total+list:{id, title, cover, start_at, end_at, quota, status, signupCount} | 403 |
-| 新增/发布活动（管理） | POST /api/admin/activities | {title, cover, content, start_at, end_at, quota, status}（status 传 published 即发布） | {id} | 1005 |
+| 新增/发布活动（管理） | POST /api/admin/activities | {title, cover, content, start_at, end_at, **signup_start_at, signup_end_at**（报名窗口，必填）, quota, status}（status 传 published 即发布） | {id} | 1005 |
 | 编辑/下架（管理） | PUT /api/admin/activities/:id | 同上字段（下架传 status=offline） | — | 404/1005 |
 | 删除活动（管理） | DELETE /api/admin/activities/:id | — | — | 404 |
 | 报名名单（管理） | GET /api/admin/activities/:id/signups | page/pageSize | total+list:{user_id, phone, remark, created_at} | 403 |
@@ -206,10 +206,10 @@
 
 | 接口 | 方法+路径 | 请求参数 | data 返回 | 错误码 |
 |---|---|---|---|---|
-| 模块热度 | GET /api/admin/analytics/module-hot | dateRange 可选 | list:{module, pv} | 403 |
+| 模块热度 | GET /api/admin/analytics/modules | dateRange 可选 | list:{module, pv} | 403 |
 | 访问趋势 | GET /api/admin/analytics/trend | days（默认 7） | list:{date, pv, uv} | 403 |
 | 转化漏斗 | GET /api/admin/analytics/funnel | — | list:{step, count} | 403 |
-| AI 分析解读 | POST /api/admin/analytics/interpretation | dateRange 可选 | {summary} | 403/1005 |
+| AI 分析解读 | POST /api/admin/analytics/interpret | dateRange 可选 | {summary} | 403/1005 |
 
 约定：基于模拟数据（mock_visit 灌 30 天），不接真实埋点。分析查看 operator 可用；**发起 AI 解读仅 super_admin**（是否放开给 operator 由 D 确认）。使用方：数据分析页 → 任务2（杨乐曈）。
 
