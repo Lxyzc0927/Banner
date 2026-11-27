@@ -1,0 +1,498 @@
+﻿# 审查修复 unified diff
+
+# 基线：Lxyzc0927/Banner @ 7898247eb43fee0343f424b7ed579f0fe2dcab71
+# 说明：+ 为新增行，- 为删除行；security.js 是新增文件。
+
+--- a/.env.example
++++ b/.env.example
+@@ -1,7 +1,8 @@
+ # ---------- 服务 ----------
+ PORT=3000
+-HOST=0.0.0.0
++# 默认只监听本机；真机联调改成 0.0.0.0 时，必须同时修改 JWT_SECRET 和后台密码
++HOST=127.0.0.1
+ # 生产环境必须换成随机长字符串（至少 32 位），不要提交到 Git
+ JWT_SECRET=dev-only-change-me-please-32-chars
+ JWT_USER_TTL=7d
+ JWT_ADMIN_TTL=12h
+
+--- a/server/src/config.js
++++ b/server/src/config.js
+@@ -48,9 +48,9 @@
+   serverDir,
+   adminDir: path.join(serverDir, 'public', 'admin'),
+   reportsDir: path.join(ROOT_DIR, 'reports'),
+   port: int('PORT', 3000),
+-  host: process.env.HOST || '0.0.0.0',
++  host: process.env.HOST || '127.0.0.1',
+   dbPath,
+   jwt: {
+     secret: process.env.JWT_SECRET || 'dev-only-change-me-please-32-chars',
+     userTtl: process.env.JWT_USER_TTL || '7d',
+
+--- a/server/src/server.js
++++ b/server/src/server.js
+@@ -1,8 +1,26 @@
+ 'use strict';
+ 
+ const { startServer } = require('./app');
+ const { config } = require('./config');
++const { validateBindConfig } = require('./security');
++
++const safety = validateBindConfig({
++  host: config.host,
++  defaultJwtSecret: config.jwt.isDefaultSecret,
++  adminPassword: config.seed.adminPassword,
++  operatorPassword: config.seed.operatorPassword,
++  wechatMock: config.wechat.mock,
++});
++if (safety.errors.length) {
++  console.error('\n✖ 启动被拒绝：当前监听地址不是本机，但演示默认配置仍在使用。');
++  for (const message of safety.errors) console.error(`  - ${message}`);
++  console.error('  只在本机演示请设置 HOST=127.0.0.1；需要局域网/公网访问，请先改 .env 后重试。\n');
++  process.exit(1);
++}
++for (const warning of safety.warnings) {
++  console.warn(`  [安全提醒] ${warning}`);
++}
+ 
+ const { server, db } = startServer();
+ 
+ server.once('listening', () => {
+
+--- a/server/src/security.js
++++ b/server/src/security.js
+@@ -0,0 +1,49 @@
++'use strict';
++
++/**
++ * 启动前的监听安全检查。
++ * 只监听本机时允许演示默认值；一旦监听局域网 / 公网，必须换掉示例密钥和密码。
++ */
++const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '::1']);
++const DEFAULT_ADMIN_PASSWORD = 'Admin@123456';
++const DEFAULT_OPERATOR_PASSWORD = 'Operator@123';
++
++function isLoopbackHost(host) {
++  return LOOPBACK_HOSTS.has(String(host || '').trim().toLowerCase());
++}
++
++function validateBindConfig({
++  host = '127.0.0.1',
++  defaultJwtSecret = false,
++  adminPassword = '',
++  operatorPassword = '',
++  wechatMock = false,
++} = {}) {
++  const errors = [];
++  const warnings = [];
++  const loopback = isLoopbackHost(host);
++
++  if (loopback) {
++    return { loopback, errors, warnings };
++  }
++
++  if (defaultJwtSecret) {
++    errors.push('JWT_SECRET 仍是示例默认值，监听局域网/公网前必须改成随机长字符串（至少 32 位）');
++  }
++  if (adminPassword === DEFAULT_ADMIN_PASSWORD || operatorPassword === DEFAULT_OPERATOR_PASSWORD) {
++    errors.push('后台种子密码仍是示例默认值，监听局域网/公网前必须修改 SEED_ADMIN_PASSWORD / SEED_OPERATOR_PASSWORD');
++  }
++  if (wechatMock) {
++    warnings.push('当前 WECHAT_MOCK=true；真机授权验收前请关闭 Mock，并配置 WECHAT_APPID / WECHAT_SECRET');
++  }
++
++  return { loopback, errors, warnings };
++}
++
++module.exports = {
++  LOOPBACK_HOSTS,
++  DEFAULT_ADMIN_PASSWORD,
++  DEFAULT_OPERATOR_PASSWORD,
++  isLoopbackHost,
++  validateBindConfig,
++};
+
+--- a/server/src/modules/auth/routes.js
++++ b/server/src/modules/auth/routes.js
+@@ -18,9 +18,9 @@
+   db.prepare('UPDATE c_user SET phone = ?, updated_at = ? WHERE id = ?').run(phone, nowIso(), userId);
+ }
+ 
+ function register(router) {
+-  router.post('/api/auth/wechat/login', async (ctx) => {
++  const wechatLoginHandler = async (ctx) => {
+     const body = asObject(ctx.body || {});
+     const code = string(body.code, 'code', { required: true, max: 512 });
+     const nickname = string(body.nickname, 'nickname', { max: 40 });
+     const avatarUrl = string(body.avatarUrl, 'avatarUrl', { max: 500 });
+@@ -88,11 +88,15 @@
+       phoneBound: Boolean(result.user.phone),
+       user: publicUser(result.user),
+       mock: Boolean(session.mock),
+     });
+-  });
++  };
+ 
+-  router.post('/api/auth/wechat/phone', requireUser, async (ctx) => {
++  // 兼容小程序现有调用：/api/auth/wx-login
++  router.post('/api/auth/wechat/login', wechatLoginHandler);
++  router.post('/api/auth/wx-login', wechatLoginHandler);
++
++  const wechatPhoneHandler = async (ctx) => {
+     const body = asObject(ctx.body || {});
+     const phoneCode = string(body.code, 'code', { max: 512 });
+     const directPhone = body.phone ? parsePhone(body.phone) : null;
+     if (!phoneCode && !directPhone) throw errors.badRequest('缺少手机号授权 code');
+@@ -105,9 +109,13 @@
+     bindPhone(ctx.db, ctx.user.id, info.phone);
+     const user = ctx.db.prepare('SELECT * FROM c_user WHERE id = ?').get(ctx.user.id);
+     audit(ctx, 'user.bind_phone', { targetType: 'c_user', targetId: user.id });
+     ctx.ok({ user: publicUser(user), changed: true });
+-  });
++  };
++
++  // 兼容小程序现有调用：/api/auth/phone
++  router.post('/api/auth/wechat/phone', requireUser, wechatPhoneHandler);
++  router.post('/api/auth/phone', requireUser, wechatPhoneHandler);
+ 
+   router.get('/api/auth/me', requireUser, (ctx) => {
+     const signupCount = ctx.db
+       .prepare("SELECT COUNT(*) AS count FROM signup WHERE user_id = ? AND status = 'confirmed'")
+
+--- a/server/src/modules/users/routes.js
++++ b/server/src/modules/users/routes.js
+@@ -196,10 +196,10 @@
+       pageSize,
+     });
+   });
+ 
+-  // C 端：我的报名
+-  router.get('/api/users/me/signups', requireUser, (ctx) => {
++  // C 端：我的报名；同时兼容小程序现有的 /api/signups/mine
++  const mySignupsHandler = (ctx) => {
+     const { page, pageSize, offset } = pagination(ctx.query);
+     const total = ctx.db.prepare('SELECT COUNT(*) AS count FROM signup WHERE user_id = ?').get(ctx.user.id).count;
+     const rows = ctx.db
+       .prepare(
+@@ -231,9 +231,12 @@
+       total,
+       page,
+       pageSize,
+     });
+-  });
++  };
++
++  router.get('/api/users/me/signups', requireUser, mySignupsHandler);
++  router.get('/api/signups/mine', requireUser, mySignupsHandler);
+ 
+   router.get('/api/users/me', requireUser, (ctx) => {
+     ctx.ok({ user: publicUser(ctx.user) });
+   });
+
+--- a/server/src/modules/analytics/service.js
++++ b/server/src/modules/analytics/service.js
+@@ -221,33 +221,42 @@
+     { key: 'step3', label: '查看活动详情', description: '打开任意活动详情' },
+     { key: 'step4', label: '点击报名', description: '在详情页点击报名按钮' },
+     { key: 'step5', label: '报名成功', description: '服务端校验通过并创建报名记录' },
+   ];
++  const first = row.step1 || 0;
++  const hasData = first > 0;
+   const steps = definitions.map((def, index) => {
+     const count = row[def.key] || 0;
+     const prev = index === 0 ? count : row[definitions[index - 1].key] || 0;
+-    const first = row.step1 || 0;
++    const hasPrev = index === 0 ? hasData : prev > 0;
++    const rateFromPrev = index === 0
++      ? (hasData ? 100 : null)
++      : (prev > 0 ? pct(count, prev) : null);
+     return {
+       order: index + 1,
+       key: def.key,
+       label: def.label,
+       description: def.description,
+       sessions: count,
+       visitors: row[`visitors${index + 1}`] || 0,
+-      rateFromStart: pct(count, first),
+-      rateFromPrev: index === 0 ? 100 : pct(count, prev),
+-      dropRate: index === 0 ? 0 : round(100 - pct(count, prev), 2),
++      rateFromStart: hasData ? pct(count, first) : null,
++      rateFromPrev,
++      dropRate: index === 0
++        ? (hasData ? 0 : null)
++        : (!hasPrev || rateFromPrev === null ? null : round(100 - rateFromPrev, 2)),
+     };
+   });
+-  const biggestDrop = steps
+-    .slice(1)
+-    .reduce((worst, step) => (step.dropRate > worst.dropRate ? step : worst), steps[1] || steps[0]);
++  const candidates = steps.slice(1).filter((step) => step.dropRate !== null && step.dropRate !== undefined);
++  const biggestDrop = candidates.length
++    ? candidates.reduce((worst, step) => (step.dropRate > worst.dropRate ? step : worst), candidates[0])
++    : null;
+ 
+   return {
+     basis: 'session',
+     activityId,
++    hasData,
+     steps,
+-    overallConversion: pct(row.step5 || 0, row.step1 || 0),
++    overallConversion: hasData ? pct(row.step5 || 0, first) : null,
+     biggestDrop: biggestDrop
+       ? { label: biggestDrop.label, dropRate: biggestDrop.dropRate, from: steps[biggestDrop.order - 2]?.label }
+       : null,
+   };
+
+--- a/server/src/modules/analytics/ai.js
++++ b/server/src/modules/analytics/ai.js
+@@ -133,8 +133,33 @@
+   const overview = bundle.overview;
+   const top = bundle.modules[0] || { moduleLabel: '暂无', pv: 0, pvShare: 0, avgDurationMs: 0 };
+   const funnel = bundle.funnel;
+   const drop = funnel.biggestDrop;
++  if (!funnel.hasData) {
++    return {
++      headline: '当前区间没有可分析的访问数据',
++      summary: `所选区间内首页访问会话数为 0，PV ${overview.pv}、UV ${overview.uv}。没有第一步数据时，转化率和流失率都没有统计意义，不能写成“100% 流失”。`,
++      findings: [
++        {
++          title: '漏斗数据为空',
++          evidence: '进入首页的会话数为 0，五个步骤均无有效样本。',
++          implication: '当前应优先确认埋点是否上报，或先生成模拟数据，而不是解读转化率。',
++        },
++      ],
++      recommendations: [
++        {
++          priority: 'P0',
++          action: '先执行 npm run mock -- --clear --days 30 --sessions 1800 --seed 42 生成模拟数据，或检查小程序首页埋点是否上报。',
++          owner: '后端',
++          expectedImpact: '补齐首页访问事件后，才能计算模块热度与转化漏斗。',
++        },
++      ],
++      risks: [
++        '空区间不能计算转化率；接口对无数据步骤返回 null，而不是 0 或 100%。',
++      ],
++      confidence: 'low',
++    };
++  }
+   const lastTrend = bundle.trend[bundle.trend.length - 1] || { pv: 0, uv: 0 };
+   const recent = bundle.trend.slice(-7);
+   const prior = bundle.trend.slice(-14, -7);
+   const avg = (list, key) => (list.length ? list.reduce((sum, item) => sum + item[key], 0) / list.length : 0);
+@@ -275,9 +300,11 @@
+   let source = 'fallback';
+   let model = 'rule-based-v1';
+   let fallbackReason = null;
+ 
+-  if (config.llm.apiKey) {
++  if (!bundle.funnel.hasData) {
++    fallbackReason = '当前区间无访问数据，跳过 LLM 调用';
++  } else if (config.llm.apiKey) {
+     try {
+       const result = await callLlm(buildPrompt(bundle, question));
+       const parsed = stripJson(result.content);
+       const normalized = normalizeInsight(parsed, fallback);
+
+--- a/server/src/scripts/report.js
++++ b/server/src/scripts/report.js
+@@ -17,15 +17,22 @@
+ const { openDatabase } = require('../db');
+ const { rangeOf, summary, compare } = require('../modules/analytics/service');
+ const { generateInsight } = require('../modules/analytics/ai');
+ const { toCsv } = require('../csv');
+-const { formatLocalDateTime } = require('../time');
++const { formatLocalDateTime, localDay } = require('../time');
+ 
+ function arg(name, fallback) {
+   const index = process.argv.indexOf(`--${name}`);
+   if (index === -1) return fallback;
+   const value = Number(process.argv[index + 1]);
+   return Number.isFinite(value) ? value : fallback;
++}
++
++function stringArg(name, fallback) {
++  const index = process.argv.indexOf(`--${name}`);
++  if (index === -1) return fallback;
++  const value = process.argv[index + 1];
++  return value && !value.startsWith('--') ? value : fallback;
+ }
+ 
+ function mdTable(headers, rows) {
+   const escape = (value) => String(value ?? '').replaceAll('|', '\\|').replaceAll('\n', ' ');
+@@ -41,10 +48,12 @@
+ }
+ 
+ function main() {
+   const days = Math.min(90, Math.max(1, arg('days', 14)));
++  const to = stringArg('to', localDay());
++  if (!/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error('--to 格式应为 YYYY-MM-DD');
+   const db = openDatabase();
+-  const range = rangeOf(days);
++  const range = rangeOf(days, to);
+   const bundle = summary(db, range);
+   bundle.compare = compare(db, range);
+ 
+   const admin = db.prepare("SELECT id FROM admin_user WHERE role = 'super_admin' ORDER BY id LIMIT 1").get();
+@@ -104,10 +113,10 @@
+   ['步骤', '会话数', '相对首步', '相对上一步', '流失率'],
+   bundle.funnel.steps.map((step) => [step.label, step.sessions, `${step.rateFromStart}%`, `${step.rateFromPrev}%`, `${step.dropRate}%`]),
+ )}
+ 
+-- 总体转化率：**${bundle.funnel.overallConversion}%**
+-- 最大流失环节：**${bundle.funnel.biggestDrop?.from || '—'} → ${bundle.funnel.biggestDrop?.label || '—'}（流失 ${bundle.funnel.biggestDrop?.dropRate || 0}%）**
++- 总体转化率：**${bundle.funnel.hasData ? `${bundle.funnel.overallConversion}%` : '无数据（首页会话为 0）'}**
++- 最大流失环节：**${bundle.funnel.biggestDrop ? `${bundle.funnel.biggestDrop.from} → ${bundle.funnel.biggestDrop.label}（流失 ${bundle.funnel.biggestDrop.dropRate}%）` : '无数据'}**
+ 
+ ## 五、渠道来源
+ 
+ ${mdTable(
+@@ -173,9 +182,9 @@
+     );
+ 
+     console.log('✔ 报告生成完成');
+     console.log(`  区间: ${bundle.range.from} ~ ${bundle.range.to}`);
+-    console.log(`  核心: PV ${overview.pv} · UV ${overview.uv} · 报名 ${overview.signups} · 漏斗转化 ${bundle.funnel.overallConversion}%`);
++    console.log(`  核心: PV ${overview.pv} · UV ${overview.uv} · 报名 ${overview.signups} · 漏斗转化 ${bundle.funnel.hasData ? `${bundle.funnel.overallConversion}%` : '无数据'}`);
+     console.log(`  AI: ${insight.source === 'llm' ? `大模型 ${insight.model}` : '规则兜底'}`);
+     console.log(`  目录: ${config.reportsDir}`);
+     db.close();
+   });
+
+--- a/server/public/admin/app.js
++++ b/server/public/admin/app.js
+@@ -357,21 +357,26 @@
+     if (!funnel?.steps?.length) {
+       container.innerHTML = '<div class="empty-state"><strong>暂无漏斗数据</strong><p>需要首页、活动列表、详情、报名点击与成功事件。</p></div>';
+       return;
+     }
++    if (funnel.hasData === false || funnel.steps[0]?.sessions === 0) {
++      $('#funnel-overall').textContent = '暂无数据';
++      container.innerHTML = '<div class="empty-state"><strong>当前区间没有访问数据</strong><p>生成模拟数据或接入真实埋点后，这里会显示五步转化漏斗。</p></div>';
++      return;
++    }
+     $('#funnel-overall').textContent = `总转化 ${pct(funnel.overallConversion)}`;
+     container.innerHTML = funnel.steps
+       .map(
+         (step, index) => `
+         <div class="funnel-step">
+           <div class="funnel-top">
+             <strong>${index + 1}. ${escapeHtml(step.label)}</strong>
+-            <span>${num(step.sessions)} 会话 · ${pct(step.rateFromStart)}${
+-              index > 0 ? ` · <span class="funnel-drop">流失 ${pct(step.dropRate)}</span>` : ''
++            <span>${num(step.sessions)} 会话 · ${step.rateFromStart == null ? '—' : pct(step.rateFromStart)}${
++              index > 0 && step.dropRate != null ? ` · <span class="funnel-drop">流失 ${pct(step.dropRate)}</span>` : ''
+             }</span>
+           </div>
+           <div class="funnel-track">
+-            <div class="funnel-fill" style="width:${Math.max(4, step.rateFromStart)}%"><span>${num(step.sessions)}</span></div>
++            <div class="funnel-fill" style="width:${Math.max(4, step.rateFromStart || 0)}%"><span>${num(step.sessions)}</span></div>
+           </div>
+         </div>`,
+       )
+       .join('');
+
+--- a/server/tests/api.test.js
++++ b/server/tests/api.test.js
+@@ -13,8 +13,10 @@
+ const { openDatabase } = require('../src/db');
+ const { createApp } = require('../src/app');
+ const { hashPassword } = require('../src/auth');
+ const { nowIso, addDays, localDay } = require('../src/time');
++const { funnel } = require('../src/modules/analytics/service');
++const { validateBindConfig } = require('../src/security');
+ 
+ let db;
+ let server;
+ let baseUrl;
+@@ -170,8 +172,30 @@
+     assert.equal(meta.body.code, 0);
+     assert.ok(meta.body.data.modules.includes('activities'));
+   });
+ 
++  test('非本机监听必须替换示例密钥和后台密码', () => {
++    const unsafe = validateBindConfig({
++      host: '0.0.0.0',
++      defaultJwtSecret: true,
++      adminPassword: 'Admin@123456',
++      operatorPassword: 'Operator@123',
++      wechatMock: true,
++    });
++    assert.equal(unsafe.loopback, false);
++    assert.ok(unsafe.errors.length >= 2);
++    assert.ok(unsafe.warnings.some((item) => item.includes('WECHAT_MOCK')));
++
++    const local = validateBindConfig({
++      host: '127.0.0.1',
++      defaultJwtSecret: true,
++      adminPassword: 'Admin@123456',
++      operatorPassword: 'Operator@123',
++      wechatMock: true,
++    });
++    assert.equal(local.errors.length, 0);
++  });
++
+   test('后台登录：错误密码返回 1001，正确密码返回 token', async () => {
+     const wrong = await api('/api/auth/admin/login', {
+       method: 'POST',
+       body: { username: 'superadmin', password: 'wrong-password' },
+@@ -241,8 +265,29 @@
+     assert.equal(phone.body.data.user.phone, '13911112222');
+ 
+     const me = await api('/api/auth/me', { token: first.body.data.token });
+     assert.equal(me.body.data.user.phone, '13911112222');
++  });
++
++  test('兼容小程序现有路径：wx-login / phone / signups/mine', async () => {
++    const login = await api('/api/auth/wx-login', {
++      method: 'POST',
++      body: { code: 'mock:alias-user', phoneCode: 'mock:13944440001' },
++    });
++    assert.equal(login.body.code, 0);
++    assert.equal(login.body.data.phoneBound, true);
++
++    const phone = await api('/api/auth/phone', {
++      method: 'POST',
++      token: login.body.data.token,
++      body: { phone: '13944440002' },
++    });
++    assert.equal(phone.body.code, 0);
++    assert.equal(phone.body.data.user.phone, '13944440002');
++
++    const mine = await api('/api/signups/mine', { token: login.body.data.token });
++    assert.equal(mine.body.code, 0);
++    assert.ok(Array.isArray(mine.body.data.list));
+   });
+ 
+   test('一个手机号只能绑定一个微信账号', async () => {
+     const user = await loginUser('mock:test-user-2');
+@@ -542,8 +587,27 @@
+       });
+     }
+   });
+ 
++  test('空区间漏斗返回 null，不应报告 100% 流失', () => {
++    const empty = openDatabase(':memory:');
++    try {
++      const result = funnel(empty, {
++        from: '2026-01-01',
++        to: '2026-01-02',
++        fromIso: '2026-01-01T00:00:00.000Z',
++        toIso: '2026-01-02T23:59:59.999Z',
++      });
++      assert.equal(result.hasData, false);
++      assert.equal(result.overallConversion, null);
++      assert.equal(result.biggestDrop, null);
++      assert.ok(result.steps.every((step) => step.dropRate === null));
++      assert.ok(result.steps.every((step) => step.rateFromPrev === null));
++    } finally {
++      empty.close();
++    }
++  });
++
+   test('summary 返回模块热度、趋势与严格顺序漏斗', async () => {
+     const summary = await api('/api/admin/analytics/summary', { token: superToken });
+     assert.equal(summary.body.code, 0);
+     assert.ok(summary.body.data.modules.length >= 3);
+
+

@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#292524"/>
+      <stop offset="0.55" stop-color="#78350f"/>
+      <stop offset="1" stop-color="#d97706"/>
+    </linearGradient>
+  </defs>
+  <rect width="800" height="450" fill="url(#g)"/>
+  <circle cx="640" cy="110" r="150" fill="#fde68a" opacity="0.12"/>
+  <path d="M250 300h220v-70c0-55 45-100 100-100h30" stroke="#fffbeb" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <path d="M220 300h420" stroke="#fffbeb" stroke-width="8" stroke-linecap="round"/>
+  <path d="M290 190c0-35 28-63 63-63h40" stroke="#fffbeb" stroke-width="8" fill="none" stroke-linecap="round"/>
+  <text x="56" y="92" fill="#fffbeb" font-family="Arial, sans-serif" font-size="26" letter-spacing="6" opacity="0.8">COFFEE &amp; RIDE</text>
+  <text x="56" y="158" fill="#ffffff" font-family="Arial, sans-serif" font-size="54" font-weight="700">门店咖啡品鉴会</text>
+</svg>
