@@ -5,6 +5,9 @@ let pendingImage = null;
 let modalSession = 0;
 /* 当前弹窗是否正在读取图片，读取期间禁用保存，避免丢图 */
 let imageReading = false;
+/* 读取序号：每次选图自增，只有最新一次读取的回调能更新预览/待保存图/保存状态。
+   弹窗会话号只防跨弹窗串图，序号进一步防同一弹窗内"先选A后选B、A后完成覆盖B"。 */
+let imageReadSeq = 0;
 
 const PAGE_META = {
   home: { title: '首页内容管理', desc: '管理 Banner 图与新车资讯，新增/编辑/上下架/排序' },
@@ -217,19 +220,23 @@ function closeModal() {
   q('#modal-root').innerHTML = '';
 }
 
-/* 图片本地预览：读取结果只写回发起它的那次弹窗；关闭弹窗后旧回调被会话号拦截 */
+/* 图片本地预览：
+   双层防护——会话号拦截"跨弹窗"串图，读取序号拦截"同一弹窗内连选多张"的竞态。
+   只有 session 未变 且 序号是当前最新 的回调，才允许更新预览/待保存图/保存状态。 */
 function previewImage(input) {
   const f = input.files && input.files[0];
   if (!f) return;
   if (!/^image\//.test(f.type)) { toast('请选择图片文件'); input.value = ''; return; }
   if (f.size > 2 * 1024 * 1024) { toast('图片不能超过 2MB'); input.value = ''; return; }
-  const session = modalSession;   // 锁定发起读取的弹窗会话
+  const session = modalSession;          // 锁定发起读取的弹窗会话
+  const seq = ++imageReadSeq;            // 本次读取的唯一序号；后一次选图会让前一次作废
   imageReading = true;
   const saveBtn = q('#btn-save');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '读取中…'; }
   const reader = new FileReader();
+  const isValid = () => session === modalSession && seq === imageReadSeq;
   reader.onload = () => {
-    if (session !== modalSession) return;   // 弹窗已关闭或换了新弹窗，丢弃旧结果
+    if (!isValid()) return;   // 弹窗已关闭 或 又选了新图（本读取已过期），丢弃旧结果
     pendingImage = reader.result;
     const p = q('#f-preview');
     if (p) { p.src = reader.result; p.style.display = 'block'; }
@@ -238,7 +245,7 @@ function previewImage(input) {
     if (btn) { btn.disabled = false; btn.textContent = '保存'; }
   };
   reader.onerror = () => {
-    if (session !== modalSession) return;
+    if (!isValid()) return;
     imageReading = false;
     toast('图片读取失败，请重试');
     const btn = q('#btn-save');
