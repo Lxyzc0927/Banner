@@ -27,8 +27,11 @@
  *          解决同秒重登签发相同 JWT 时 token 比较无法区分两次登录的问题
  *
  * 复审修复（组长 09190e8 复审意见）：
- *   - [P2] 为每次登录尝试分配序号，退出会使在途尝试失效；退出后才返回的登录响应不再恢复会话
+ *   - [P2] 为每次登录尝试分配标识，退出会使在途尝试失效；退出后才返回的登录响应不再恢复会话
  *   - [P3] 401 的清理与「登录已过期」提示都限定在当前会话，旧请求的延迟 401 不再误报
+ *
+ * 复审修复（组长 df5b8a0 复审意见）：
+ *   - [P2] 登录尝试标识改存 localStorage（跨标签页共享），另一标签页退出也能作废旧登录响应
  * ============================================================ */
 
 /* ---------- 全局配置：联调时只改这里 ---------- */
@@ -38,6 +41,7 @@ const API_CONFIG = {
   tokenKey: 'admin_token',                         // localStorage 中 token 的键名
   roleKey: 'admin_role',                           // localStorage 中角色的键名（登录时保存）
   sessionVersionKey: 'admin_session_version',      // 会话版本号：区分同秒重登签发的相同 JWT
+  loginAttemptKey: 'admin_login_attempt',          // 登录尝试标识：跨标签页共享，退出时换新使在途登录失效
   successCode: 0,                                  // code === 0 视为成功
   timeout: 10000
 };
@@ -76,13 +80,8 @@ const API = {
  * 完全相同的 JWT，仅比较 token 无法识别这是两次不同的登录。每次成功登录 / 退出
  * 都会递增版本；请求发出时记录当时的版本，401 时只有版本仍匹配才清理会话，
  * 这样迟到的旧请求 401 就不会误清新会话。
+ * 登录尝试标识同样存 localStorage，使跨标签页的退出也能让另一页在途登录作废。
  */
-
-/* 登录尝试序号：内存态，不落 localStorage。
- * 每次发起 login 递增，退出也递增；只有序号仍等于当前值的登录响应才允许写入会话。
- * 这样「先发起登录 → 再退出 → 登录响应迟到」时，旧尝试不会把 token/角色装回去；
- * 连续发起多次登录时也只有最后一次尝试有效。 */
-let loginAttemptSeq = 0;
 
 const Token = {
   get()      { return localStorage.getItem(API_CONFIG.tokenKey) || ''; },
@@ -90,6 +89,14 @@ const Token = {
   clear()    { localStorage.removeItem(API_CONFIG.tokenKey); },
   getRole()  { return localStorage.getItem(API_CONFIG.roleKey) || ''; },
   setRole(r) { if (r) localStorage.setItem(API_CONFIG.roleKey, r); },
+  // 登录尝试标识：存 localStorage，多个标签页共享。每次登录/退出都换新标识，
+  // 登录响应写入会话前校验标识仍是自己发起时的值；另一标签页退出也能作废旧尝试。
+  newLoginAttempt() {
+    const id = Date.now().toString(36) + '-' + Math.random().toString(36).slice(2);
+    localStorage.setItem(API_CONFIG.loginAttemptKey, id);
+    return id;
+  },
+  loginAttempt() { return localStorage.getItem(API_CONFIG.loginAttemptKey) || ''; },
   // 会话版本：localStorage 存字符串，读取时转数字
   version()  { return Number(localStorage.getItem(API_CONFIG.sessionVersionKey) || 0); },
   bump()     { const v = this.version() + 1; localStorage.setItem(API_CONFIG.sessionVersionKey, String(v)); return v; },
@@ -206,11 +213,11 @@ const Adapt = {
  */
 const Api = {
   async login(username, password) {
-    // 记录本次尝试序号：等待响应期间若用户退出（或又发起新登录），序号会变化，
-    // 迟到的成功响应必须丢弃，否则会把 token/角色写回已退出的会话。
-    const attempt = ++loginAttemptSeq;
+    // 在共享存储登记本次尝试：等待响应期间若任一标签页退出（或又发起新登录），
+    // 标识会被换掉，迟到的成功响应必须丢弃，否则会把 token/角色写回共享会话。
+    const attempt = Token.newLoginAttempt();
     const data = await request(API.login, { method: 'POST', body: { username, password } });
-    if (attempt !== loginAttemptSeq) {
+    if (attempt !== Token.loginAttempt()) {
       throw new Error('LOGIN_SUPERSEDED');   // 尝试已作废，不恢复会话
     }
     // 先递增会话版本，再写入新 token/角色：让此前发出的旧请求 401 无法清理这次新登录
@@ -222,9 +229,9 @@ const Api = {
     return data;   // { token, admin: { id, username, role, ... } }
   },
 
-  // 退出登录：使在途登录尝试失效、递增会话版本使在途请求失效，再清理 token/角色
+  // 退出登录：换新共享尝试标识使所有标签页的在途登录失效，递增会话版本使在途请求失效，再清理 token/角色
   async logout() {
-    loginAttemptSeq++;
+    Token.newLoginAttempt();
     Token.bump();
     Token.clearAll();
   },
