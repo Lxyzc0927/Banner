@@ -1,0 +1,5 @@
+.empty { padding: 120rpx 40rpx; text-align: center; color: #999; }
+.icon { font-size: 80rpx; opacity: .5; }
+.text { font-size: 26rpx; margin-top: 16rpx; }
+.action { margin-top: 28rpx; background: #fff; color: #e8541e; border: 2rpx solid #e8541e; border-radius: 30rpx; font-size: 24rpx; }
+.action::after { border: none; }

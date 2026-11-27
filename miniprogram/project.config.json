@@ -1,0 +1,14 @@
+{
+  "description": "XX 摩托销售管理系统 - 微信小程序",
+  "projectname": "banner-miniprogram",
+  "appid": "touristappid",
+  "compileType": "miniprogram",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true
+  },
+  "condition": {}
+}

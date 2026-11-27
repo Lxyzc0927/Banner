@@ -1,0 +1,23 @@
+<empty wx:if="{{!loggedIn}}" text="登录后查看报名记录" action-text="去登录" bind:action="onLogin" />
+
+<block wx:else>
+  <view class="list">
+    <view wx:for="{{list}}" wx:key="id" class="item" data-id="{{item.activityId}}" bindtap="open">
+      <view class="row">
+        <text class="title">{{item.title}}</text>
+        <text class="tag {{item.status === '已结束' ? 'tag-gray' : 'tag-green'}}">{{item.status === '已结束' ? '已结束' : '待参加'}}</text>
+      </view>
+      <view class="meta">🕒 {{item.date}}　📍 {{item.place}}</view>
+      <view class="meta">报名人：{{item.name}}　{{item.phone}}</view>
+      <view class="meta light">报名时间：{{item.createdText}}</view>
+    </view>
+  </view>
+
+  <empty wx:if="{{empty && !loading && !error}}" text="还没有报名任何活动" action-text="看看活动" bind:action="goActivities" />
+
+  <view class="list-foot">
+    <text wx:if="{{loading}}">加载中…</text>
+    <text wx:elif="{{error}}" bindtap="onRetry">加载失败，点击重试</text>
+    <text wx:elif="{{finished && !empty}}">没有更多了</text>
+  </view>
+</block>

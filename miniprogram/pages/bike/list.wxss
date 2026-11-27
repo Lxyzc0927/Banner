@@ -1,0 +1,10 @@
+.toolbar { position: sticky; top: 0; z-index: 5; background: #fff; padding: 20rpx 24rpx 16rpx; }
+.search { display: flex; align-items: center; height: 72rpx; padding: 0 24rpx; background: #f5f6f8; border-radius: 36rpx; }
+.search-icon { font-size: 26rpx; margin-right: 12rpx; opacity: .6; }
+.search-input { flex: 1; font-size: 26rpx; }
+.search-clear { padding: 10rpx; color: #999; font-size: 24rpx; }
+.chips { display: flex; white-space: nowrap; margin-top: 18rpx; }
+.chip { display: inline-block; flex-shrink: 0; padding: 10rpx 26rpx; margin-right: 16rpx; border-radius: 30rpx; background: #f5f6f8; color: #555; font-size: 24rpx; }
+.chip.active { background: #fdeee7; color: #e8541e; font-weight: 600; }
+
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20rpx; padding: 20rpx 24rpx 0; }

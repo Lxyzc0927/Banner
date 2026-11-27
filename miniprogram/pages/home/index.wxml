@@ -1,0 +1,46 @@
+<empty wx:if="{{error}}" text="加载失败，请检查网络" action-text="重新加载" bind:action="onRetry" />
+
+<view wx:elif="{{!loading}}" class="page">
+  <swiper wx:if="{{banners.length}}" class="banner" autoplay circular interval="4000" indicator-dots indicator-active-color="#e8541e">
+    <swiper-item wx:for="{{banners}}" wx:key="id" data-link="{{item.link}}" bindtap="onBanner">
+      <image wx:if="{{item.image}}" class="banner-img" src="{{item.image}}" mode="aspectFill" />
+      <view wx:else class="banner-img placeholder">
+        <text class="banner-title">{{item.title}}</text>
+        <text wx:if="{{item.link}}" class="banner-sub">点击了解详情 ›</text>
+      </view>
+    </swiper-item>
+  </swiper>
+
+  <view class="entries">
+    <view class="entry" bindtap="goBikes"><view class="entry-icon">🏍️</view><text>全部车型</text></view>
+    <view class="entry" bindtap="goActivities"><view class="entry-icon">🚩</view><text>近期活动</text></view>
+    <view class="entry" bindtap="goChat"><view class="entry-icon">💬</view><text>智能客服</text></view>
+    <view class="entry" bindtap="goFavorites"><view class="entry-icon">♥</view><text>我的收藏</text></view>
+  </view>
+
+  <view class="section">
+    <view class="section-head">
+      <text class="section-title">热门车型</text>
+      <text class="section-more" bindtap="goBikes">查看全部 ›</text>
+    </view>
+    <view class="grid">
+      <bike-card wx:for="{{hotBikes}}" wx:key="id" class="grid-item" bike="{{item}}" />
+    </view>
+  </view>
+
+  <view wx:if="{{news.length}}" class="section">
+    <view class="section-head"><text class="section-title">新车资讯</text></view>
+    <view wx:for="{{news}}" wx:key="id" class="news" data-index="{{index}}" bindtap="onNews">
+      <view class="news-title">{{item.title}}</view>
+      <view class="news-date">{{item.date}}</view>
+    </view>
+  </view>
+
+  <view class="chat-entry" bindtap="goChat">
+    <view>
+      <view class="chat-title">不知道怎么选？</view>
+      <view class="chat-sub">告诉智能客服预算和用途，帮你推荐车型</view>
+    </view>
+    <text class="chat-btn">去咨询</text>
+  </view>
+</view>

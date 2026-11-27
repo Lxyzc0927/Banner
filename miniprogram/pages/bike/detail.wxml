@@ -1,0 +1,47 @@
+<empty wx:if="{{error}}" text="{{error}}" action-text="看看其他车型" bind:action="goBikes" />
+
+<view wx:elif="{{bike}}">
+  <swiper wx:if="{{bike.images.length}}" class="hero" indicator-dots circular indicator-active-color="#e8541e">
+    <swiper-item wx:for="{{bike.images}}" wx:key="*this">
+      <image class="hero-img" src="{{item}}" mode="aspectFill" />
+    </swiper-item>
+  </swiper>
+  <view wx:else class="hero placeholder">
+    <text class="hero-cat">{{bike.category}}</text>
+    <text class="hero-name">{{bike.name}}</text>
+  </view>
+
+  <view class="section">
+    <view class="name">{{bike.name}}</view>
+    <view class="price">¥{{priceText}}<text class="price-tip">厂商指导价</text></view>
+    <view class="tags">
+      <text class="tag">{{bike.category}}</text>
+      <text class="tag tag-gray" wx:for="{{bike.tags}}" wx:key="*this">{{item}}</text>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">核心参数</text></view>
+    <view class="params">
+      <view class="param" wx:for="{{params}}" wx:key="label">
+        <text class="param-value">{{item.value}}</text>
+        <text class="param-label">{{item.label}}</text>
+      </view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">车型介绍</text></view>
+    <text class="desc">{{bike.desc}}</text>
+  </view>
+
+  <view class="bottom-gap"></view>
+  <view class="bottom-bar safe">
+    <view class="fav {{bike.favorited ? 'on' : ''}}" bindtap="onFavorite">
+      <text class="fav-icon">{{bike.favorited ? '♥' : '♡'}}</text>
+      <text>{{bike.favorited ? '已收藏' : '收藏'}}</text>
+    </view>
+    <button class="btn-ghost grow" bindtap="onChat">咨询客服</button>
+    <button class="btn-primary grow" bindtap="goActivities">看看活动</button>
+  </view>
+</view>

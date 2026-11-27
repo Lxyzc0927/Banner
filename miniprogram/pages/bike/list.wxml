@@ -1,0 +1,22 @@
+<view class="toolbar">
+  <view class="search">
+    <text class="search-icon">🔍</text>
+    <input class="search-input" value="{{keyword}}" placeholder="搜索车型名称或类别" confirm-type="search" bindinput="onInput" bindconfirm="onSearch" />
+    <text wx:if="{{keyword}}" class="search-clear" bindtap="onClear">✕</text>
+  </view>
+  <scroll-view class="chips" scroll-x enable-flex>
+    <view wx:for="{{ccOptions}}" wx:key="value" class="chip {{cc === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="onCc">{{item.label}}</view>
+  </scroll-view>
+</view>
+
+<view class="grid">
+  <bike-card wx:for="{{list}}" wx:key="id" bike="{{item}}" />
+</view>
+
+<empty wx:if="{{empty && !loading && !error}}" text="没有找到相关车型" action-text="{{keyword || cc ? '清除筛选' : ''}}" bind:action="onClearFilter" />
+
+<view class="list-foot">
+  <text wx:if="{{loading}}">加载中…</text>
+  <text wx:elif="{{error}}" bindtap="onRetry">加载失败，点击重试</text>
+  <text wx:elif="{{finished && !empty}}">共 {{total}} 款车型，没有更多了</text>
+</view>

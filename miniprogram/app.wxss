@@ -1,0 +1,65 @@
+page {
+  background: #f5f6f8;
+  color: #2c2c2a;
+  font-size: 28rpx;
+  font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --primary: #e8541e;
+  --dark: #1f2430;
+}
+
+button::after { border: none; }
+
+/* 通用按钮：用 button.xxx 提高优先级，覆盖 style v2 的默认宽度 */
+button.btn-primary,
+button.btn-ghost {
+  width: auto;
+  margin: 0;
+  padding: 0 32rpx;
+  height: 80rpx;
+  line-height: 80rpx;
+  border-radius: 40rpx;
+  font-size: 28rpx;
+  font-weight: 500;
+}
+button.btn-primary { background: var(--primary); color: #fff; }
+button.btn-primary[disabled] { background: #d6d6d6 !important; color: #fff !important; }
+button.btn-ghost { background: #fff; color: var(--primary); border: 2rpx solid var(--primary); }
+button.btn-block { display: block; width: 100%; }
+
+.section { background: #fff; margin: 20rpx 24rpx; border-radius: 16rpx; padding: 28rpx; }
+.section-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20rpx; }
+.section-title { font-size: 32rpx; font-weight: 600; }
+.section-more { font-size: 24rpx; color: #888; }
+
+.tag { display: inline-block; padding: 4rpx 14rpx; border-radius: 20rpx; font-size: 22rpx; margin-right: 12rpx; background: #fdeee7; color: var(--primary); }
+.tag-gray { background: #f1efe8; color: #5f5e5a; }
+.tag-green { background: #e1f5ee; color: #0f6e56; }
+
+.placeholder {
+  background: linear-gradient(135deg, #2a3040 0%, #1f2430 55%, #e8541e 140%);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.bottom-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 10;
+  display: flex; align-items: center; gap: 20rpx;
+  padding: 16rpx 24rpx; background: #fff; box-shadow: 0 -2rpx 12rpx rgba(0, 0, 0, .05);
+}
+.safe { padding-bottom: calc(16rpx + env(safe-area-inset-bottom)); }
+.bottom-gap { height: calc(140rpx + env(safe-area-inset-bottom)); }
+
+.list-foot { padding: 30rpx 0 40rpx; text-align: center; font-size: 24rpx; color: #999; }
+
+.progress { height: 12rpx; background: #f0f1f3; border-radius: 6rpx; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--primary); border-radius: 6rpx; }
+
+.mask { position: fixed; inset: 0; background: rgba(0, 0, 0, .45); z-index: 100; }
+.sheet {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 101;
+  background: #fff; border-radius: 24rpx 24rpx 0 0;
+  padding: 36rpx 32rpx calc(32rpx + env(safe-area-inset-bottom));
+}

@@ -1,0 +1,12 @@
+page { background: #fff; }
+.page { padding: 140rpx 60rpx 0; text-align: center; }
+.logo { width: 160rpx; height: 160rpx; line-height: 160rpx; margin: 0 auto; border-radius: 40rpx; background: #1f2430; font-size: 90rpx; }
+.brand { font-size: 44rpx; font-weight: 700; margin-top: 30rpx; }
+.slogan { font-size: 26rpx; color: #888; margin-top: 12rpx; }
+.actions { margin-top: 120rpx; }
+.tip { font-size: 26rpx; color: #666; margin-bottom: 30rpx; }
+.agree { display: flex; align-items: center; justify-content: center; margin-top: 30rpx; font-size: 24rpx; color: #888; }
+.check { width: 30rpx; height: 30rpx; line-height: 28rpx; border: 2rpx solid #ccc; border-radius: 50%; margin-right: 10rpx; font-size: 20rpx; color: #fff; }
+.check.on { background: #e8541e; border-color: #e8541e; }
+.link { color: #e8541e; }
+.skip { margin-top: 30rpx; font-size: 24rpx; color: #999; }

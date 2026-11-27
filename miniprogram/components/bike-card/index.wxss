@@ -1,0 +1,13 @@
+.card { background: #fff; border-radius: 16rpx; overflow: hidden; }
+.cover { width: 100%; height: 220rpx; display: block; }
+.placeholder {
+  background: linear-gradient(135deg, #2a3040 0%, #1f2430 55%, #e8541e 140%);
+  color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.ph-cat { font-size: 30rpx; font-weight: 600; letter-spacing: 4rpx; }
+.ph-cc { font-size: 22rpx; opacity: .7; margin-top: 6rpx; }
+.info { padding: 16rpx 20rpx 20rpx; }
+.name { font-size: 28rpx; font-weight: 600; color: #2c2c2a; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.meta { font-size: 22rpx; color: #888; margin-top: 6rpx; }
+.price { font-size: 30rpx; color: #e8541e; font-weight: 600; margin-top: 10rpx; }
+.unit { font-size: 22rpx; font-weight: 400; color: #888; }

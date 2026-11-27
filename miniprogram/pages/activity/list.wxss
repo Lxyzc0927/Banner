@@ -1,0 +1,16 @@
+.tabs { position: sticky; top: 0; z-index: 5; display: flex; background: #fff; padding: 0 24rpx; }
+.tab { flex: 1; text-align: center; padding: 24rpx 0; font-size: 28rpx; color: #666; border-bottom: 4rpx solid transparent; }
+.tab.active { color: #e8541e; font-weight: 600; border-bottom-color: #e8541e; }
+
+.list { padding: 20rpx 24rpx 0; }
+.card { background: #fff; border-radius: 16rpx; overflow: hidden; margin-bottom: 20rpx; }
+.card-cover { height: 200rpx; }
+.cover-title { font-size: 36rpx; font-weight: 700; letter-spacing: 4rpx; }
+.card-body { padding: 24rpx; }
+.row { display: flex; justify-content: space-between; align-items: center; }
+.title { font-size: 30rpx; font-weight: 600; }
+.row .tag { margin-right: 0; }
+.meta { font-size: 24rpx; color: #888; margin-top: 10rpx; }
+.quota { display: flex; align-items: center; gap: 16rpx; margin-top: 18rpx; }
+.grow { flex: 1; }
+.quota-text { font-size: 22rpx; color: #888; }

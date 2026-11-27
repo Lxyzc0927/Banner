@@ -1,0 +1,44 @@
+<empty wx:if="{{error}}" text="{{error}}" action-text="查看其他活动" bind:action="goList" />
+
+<view wx:elif="{{activity}}">
+  <view class="hero placeholder">
+    <text class="hero-title">{{activity.title}}</text>
+    <text class="hero-sub">{{activity.date}}</text>
+  </view>
+
+  <view class="section">
+    <view class="title">{{activity.title}}</view>
+    <view class="info"><text class="label">活动时间</text><text>{{activity.date}}</text></view>
+    <view class="info"><text class="label">活动地点</text><text>{{activity.place}}</text></view>
+    <view class="info"><text class="label">报名情况</text><text>已报 {{activity.signup}} 人 / 限 {{activity.quota}} 人</text></view>
+    <view class="progress mt"><view class="progress-fill" style="width: {{percent}}%"></view></view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">活动介绍</text></view>
+    <text class="desc">{{activity.desc}}</text>
+  </view>
+
+  <view class="bottom-gap"></view>
+  <view class="bottom-bar safe">
+    <button class="btn-primary btn-block" disabled="{{button.disabled}}" bindtap="onSignup">{{button.text}}</button>
+  </view>
+</view>
+
+<block wx:if="{{sheet}}">
+  <view class="mask" bindtap="closeSheet" catchtouchmove="noop"></view>
+  <view class="sheet" catchtouchmove="noop">
+    <view class="sheet-title">报名：{{activity.title}}</view>
+    <view class="field">
+      <text class="field-label">姓名</text>
+      <input class="field-input" value="{{form.name}}" placeholder="请输入真实姓名" maxlength="20" bindinput="onName" />
+    </view>
+    <view class="field">
+      <text class="field-label">手机号</text>
+      <text wx:if="{{user.phone}}" class="field-value">{{user.phone}}</text>
+      <button wx:else class="phone-btn" size="mini" open-type="getPhoneNumber" bindgetphonenumber="onPhone">微信手机号快捷填写</button>
+    </view>
+    <view class="sheet-tip">报名信息仅用于本次活动联系与签到</view>
+    <button class="btn-primary btn-block" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submit">确认报名</button>
+  </view>
+</block>

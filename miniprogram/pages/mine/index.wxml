@@ -1,0 +1,31 @@
+<view class="header">
+  <image wx:if="{{user.avatar}}" class="avatar" src="{{user.avatar}}" mode="aspectFill" />
+  <view wx:else class="avatar avatar-ph">{{user ? '骑' : '?'}}</view>
+  <view wx:if="{{user}}" class="who">
+    <view class="nick">{{user.nickname}}</view>
+    <view class="phone">{{user.phone || '未绑定手机号'}}</view>
+  </view>
+  <view wx:else class="who" bindtap="onLogin">
+    <view class="nick">点击登录</view>
+    <view class="phone">登录后可收藏车型、报名活动</view>
+  </view>
+</view>
+
+<view wx:if="{{user && !user.phone}}" class="bind">
+  <text>绑定手机号，报名活动更方便</text>
+  <button class="bind-btn" size="mini" open-type="getPhoneNumber" bindgetphonenumber="onPhone">去绑定</button>
+</view>
+
+<view class="menu">
+  <view class="menu-item" data-url="/pages/mine/favorites" data-auth="{{true}}" bindtap="onMenu">
+    <text class="menu-icon">♥</text><text class="menu-text">我的收藏</text><text class="arrow">›</text>
+  </view>
+  <view class="menu-item" data-url="/pages/mine/signups" data-auth="{{true}}" bindtap="onMenu">
+    <text class="menu-icon">🚩</text><text class="menu-text">我的报名</text><text class="arrow">›</text>
+  </view>
+  <view class="menu-item" data-url="/pages/chat/index" bindtap="onMenu">
+    <text class="menu-icon">💬</text><text class="menu-text">智能客服</text><text class="arrow">›</text>
+  </view>
+</view>
+
+<view wx:if="{{user}}" class="logout" bindtap="onLogout">退出登录</view>

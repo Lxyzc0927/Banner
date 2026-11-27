@@ -1,0 +1,12 @@
+<view class="card" bindtap="onTap">
+  <image wx:if="{{bike.cover}}" class="cover" src="{{bike.cover}}" mode="aspectFill" lazy-load />
+  <view wx:else class="cover placeholder">
+    <text class="ph-cat">{{bike.category}}</text>
+    <text class="ph-cc">{{bike.cc}}cc</text>
+  </view>
+  <view class="info">
+    <view class="name">{{bike.name}}</view>
+    <view class="meta">{{bike.category}} · {{bike.cc}}cc</view>
+    <view class="price">¥{{priceText}}<text class="unit"> 起</text></view>
+  </view>
+</view>
