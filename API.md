@@ -1,6 +1,7 @@
-# 「摩托销售管理系统」接口契约 v1.4
+# 「摩托销售管理系统」接口契约 v1.5
 
-> 定稿日期：2026.11.25；v1.4 更新：11.29 直接对照 D（刘昊）远端提交 `264b515` 的代码逐行核实（后端测试 31/31 通过），修正错误码全表、登录/活动/分析的返回结构、补齐 D 已实现的隐藏接口（发布/下架/取消报名/用户详情/管理员编辑/埋点），确认时间为 ISO 8601、数据库为 SQLite。
+> 定稿日期：2026.11.25；v1.5 更新：11.29 对照 D 最新提交 `a218dd3` 与 main 分支小程序（`b2fc86b`）实际调用复核。**接口切换方案已拍板：C 端首页/收藏/客服/筛选按小程序（A）现有调用形状定稿，秦旭实现时照做，A 无需改代码**；同时修正活动管理返回结构、分析字段名（moduleLabel/sessions）、埋点说明。
+> v1.4 更新：11.29 对照 D 远端提交 `264b515` 逐行核实，修正错误码全表、登录/活动/分析的返回结构、补齐隐藏接口（发布/下架/取消报名/用户详情/管理员编辑/埋点），确认时间为 ISO 8601、数据库为 SQLite。
 > 此后任何改动必须先改本文档，再改代码，口头约定一律无效。
 > 责任人（对应四人分工表）：
 > 任务1 = 组长兼小程序前端（李端）
@@ -69,9 +70,9 @@
 | 1012 | 并发更新冲突（活动 version） | 提示刷新后重试 |
 | 1013 | 导出名单为空 | toast 提示 |
 | 1014 | AI 服务不可用 / 解读请求过频（3 秒限频） | toast 提示稍后再试 |
-| 1015 | 重复收藏（预留，任务3 实现） | toast 显示 message |
+| 1015 | 重复收藏（预留；当前收藏接口幂等，正常不触发） | toast 显示 message |
 
-> ⚠️ 注意：旧版文档把 1006 写成"重复收藏"是错的，D 已把 1006 占用为"账号已存在"。收藏模块（任务3 实现）改用 **1015**。
+> ⚠️ 注意：旧版文档把 1006 写成"重复收藏"是错的，D 已把 1006 占用为"账号已存在"。收藏接口已定为幂等式（重复收藏/取消都返回成功），1015 仅作预留。
 
 ### 5. 鉴权与权限点
 
@@ -94,8 +95,9 @@
 
 - 响应信封字段**固定为 `code / message / data`**，前端不得读 `msg`
 - **接口 JSON 字段一律驼峰**（`startAt`、`signupStartAt`、`avatarUrl`），数据库列才是下划线（`start_at`）——前端不要照搬建表字段名
+- 车型分类字段统一为 `category`（旧名 `series` 作废）；车型详情的收藏标记为 `favorited`（旧名 `isFavorited` 作废）
 - 价格字段固定为 `price`，单位**分**，前端展示时除以 100
-- 客服接口请求字段**固定为 `question`**（字符串），不得发送 `messages` 数组
+- 客服接口请求**固定为 `messages` 数组**（多轮上下文），兼容单条 `question`；响应固定含 `reply`（与 `answer` 同值）
 - 接口路径以本文档为唯一标准，已有代码路径不一致的一方改代码
 
 ### 7. 时间格式（已按 D 实现确认）
@@ -133,9 +135,9 @@
 |---|---|---|
 | banner | id, title, image, link_type, link_url, sort, status, created_at | status 控制上下架；sort 排序 |
 | news | id, title, content, cover, date, status, sort, created_at | 新车资讯 |
-| bike | id, name, series, price(分), params(JSON), cover, status, sort, created_at | name/series 建索引 |
+| bike | id, name, category, cc(排量), tags(JSON), price(分), params(JSON), cover, status, sort, created_at | name/category 建索引 |
 | bike_image | id, bike_id, url, type(1主图/2细节), sort, created_at | 一车多图；bike_id 建索引 |
-| favorite | id, user_id(引用 c_user.id), bike_id, created_at | (user_id,bike_id) 唯一；取消收藏物理删除；重复收藏返回 1015 |
+| favorite | id, user_id(引用 c_user.id), bike_id, created_at | (user_id,bike_id) 唯一；取消收藏物理删除；收藏接口幂等（重复操作返回成功） |
 | chat_log | id, user_id(引用 c_user.id), session_id, question, answer, created_at | 按 session_id 归组 |
 
 schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一键初始化的文件**（SQLite 语法，参照 D 的写法）。
@@ -170,6 +172,7 @@ schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一
 
 | 接口 | 方法+路径 | 请求参数 | data 返回 | 错误码 |
 |---|---|---|---|---|
+| **首页聚合** | GET /api/home | — | {banners:[banner对象], news:[资讯对象], hotBikes:[车型简要]}——**一次请求拿齐首页三个区块**（与小程序 getHome 对齐） | — |
 | C 端 Banner 列表 | GET /api/banners | — | list:[{id, title, image, linkType, linkUrl}]（只返回 status=1，按 sort 升序） | — |
 | Banner 列表（管理） | GET /api/admin/banners | page/pageSize | total+list | 403 |
 | 新增 Banner（管理） | POST /api/admin/banners | {title, image, linkType, linkUrl?, sort?, status?}（title/image 必填） | {id} | 400 |
@@ -180,36 +183,40 @@ schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一
 | 新增资讯（管理） | POST /api/admin/news | {title, content, cover?, sort?, status?} | {id} | 400 |
 | 编辑（管理） | PUT /api/admin/news/:id | 同上字段 | — | 404/400 |
 | 删除（管理） | DELETE /api/admin/news/:id | — | — | 404 |
-| 热门车型（首页） | GET /api/bikes/hot | limit（默认 4） | list:[{id, name, series, price, cover}] | — |
+
+**车型简要（brief）**&#8203;：{id, name, category, cc, price, cover, tags}——首页 hotBikes 用此结构。
 
 ### 模块 3：车型【任务3（秦旭）实现，按本契约】
 
 | 接口 | 方法+路径 | 请求参数 | data 返回 | 错误码 |
 |---|---|---|---|---|
-| C 端车型列表 | GET /api/bikes | page/pageSize/keyword/series | total+list:[{id, name, series, price, cover}]（只返回 status=1） | — |
-| C 端车型详情 | GET /api/bikes/:id | — | {id, name, series, price, params, cover, isFavorited, images:[{url, type}]}（isFavorited：未登录返回 false） | 404 |
-| 车型列表（管理） | GET /api/admin/bikes | page/pageSize/keyword/series | total+list | 403 |
-| 新增车型（管理） | POST /api/admin/bikes | {name, series, price, params?, cover?, status?, sort?, images?:[{url, type, sort?}]} | {id} | 400 |
+| C 端车型列表 | GET /api/bikes | page/pageSize/keyword/category/minPrice/maxPrice（分） | total+list:[{id, name, category, cc, price, cover, tags}]（只返回 status=1） | — |
+| 筛选项 | GET /api/bikes/filters | — | {categories:[...], tags:[...]}（从在架车型汇总去重，**必须注册在 /api/bikes/:id 路由之前**） | — |
+| 热门车型 | GET /api/bikes/hot | limit（默认 4） | list:[车型简要] | — |
+| C 端车型详情 | GET /api/bikes/:id | — | {id, name, category, cc, tags, price, params, cover, favorited, images:[{url, type}]}（**收藏标记字段为 favorited**；未登录返回 false） | 404 |
+| 车型列表（管理） | GET /api/admin/bikes | page/pageSize/keyword/category | total+list | 403 |
+| 新增车型（管理） | POST /api/admin/bikes | {name, category, cc?, tags?, price, params?, cover?, status?, sort?, images?:[{url, type, sort?}]} | {id} | 400 |
 | 编辑车型（管理） | PUT /api/admin/bikes/:id | 同上字段（images 传则整体替换图集） | — | 404/400 |
 | 删除车型（管理） | DELETE /api/admin/bikes/:id | — | — | 404 |
 | 图片上传 | POST /api/upload | form-data: file | {url}（相对地址，前端拼 baseURL） | 400 |
 
-约定：`price` 整型分；`params` 为 JSON 字符串（前端原样展示）；`images[].type`：1=主图，2=细节图。第一期不做价格区间筛选（只做 keyword+series，埋点里的排序/价格筛选事件是留给统计演示的）。
+约定：`price` 整型分；`params` 为 JSON 字符串（前端原样展示）；`tags` 为 JSON 数组字符串；`images[].type`：1=主图，2=细节图。价格区间筛选（minPrice/maxPrice）小程序已实现，后端必须支持。
 使用方：小程序摩托模块 → 任务1（李端）；车型管理页 → 任务2（杨乐曈）。
 
 ### 模块 4：收藏【任务3（秦旭）实现，按本契约】
 
 | 接口 | 方法+路径 | 请求参数 | data 返回 | 错误码 |
 |---|---|---|---|---|
-| 收藏 | POST /api/favorites | {bikeId} | — | 401/1015 |
-| 取消收藏 | DELETE /api/favorites/:bikeId | — | — | 401 |
-| 我的收藏列表 | GET /api/favorites | page/pageSize | total+list:[{bikeId, name, price, cover}] | 401 |
+| 收藏/取消（切换式） | POST /api/bikes/:id/favorite | —（收藏） | {favorited:true} | 401/404 |
+| 取消收藏 | DELETE /api/bikes/:id/favorite | —（取消） | {favorited:false} | 401/404 |
+| 我的收藏列表 | GET /api/favorites | page/pageSize | total+list:[{bikeId, name, category, price, cover}] | 401 |
 
+约定：**两个接口都幂等**——重复收藏、重复取消都返回成功（与小程序 mock 行为一致）；重复收藏不再使用 1015（保留给未来强校验场景）。详情页收藏回显读 `favorited` 字段。
 使用方：小程序收藏交互与我的收藏 → 任务1（李端）。
 
 ### 模块 5：活动与报名【D 已实现】
 
-**活动对象字段（驼峰）**&#8203;：id, title, subtitle, cover, description, location, startAt, endAt, signupStartAt, signupEndAt, quota, status, statusLabel, phase, signupOpen, signupCount, remaining, signedUp, createdAt, updatedAt（管理端额外返回 createdBy/cancelledCount）。
+**活动对象字段（驼峰）**&#8203;：id, title, subtitle, cover, description, location, startAt, endAt, signupStartAt, signupEndAt, quota, status, statusLabel, phase, signupOpen, signupCount, remaining, signedUp, **version**, createdAt, updatedAt（管理端额外返回 createdBy/cancelledCount）。
 
 | 接口 | 方法+路径 | 请求参数 | data 返回 | 错误码 |
 |---|---|---|---|---|
@@ -219,14 +226,14 @@ schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一
 | 取消报名 | DELETE /api/activities/:id/signup | — | {signup:{id, signupNo, status:"cancelled", cancelledAt}, activity:{id, quota, signedUp, remaining}} | 401/404/1002（活动已结束不能取消） |
 | 我的报名列表 | GET /api/users/me/signups | page/pageSize | 见模块 1（activity 嵌套在 list[].activity） | 401 |
 | 活动列表（管理） | GET /api/admin/activities | page/pageSize/keyword/status | total+list:[活动对象] | 403 |
-| 活动详情（管理） | GET /api/admin/activities/:id | — | 活动对象 | 403/404 |
-| 新增活动（管理） | POST /api/admin/activities | {title（必填）, subtitle?, cover?, description?, location?, startAt, endAt, signupStartAt, signupEndAt, quota（>0）, status?（默认 draft）}——**字段驼峰，传 start_at 会 400**；报名截止不能晚于活动结束 | {activity:{...}} | 400/1002 |
-| 编辑活动（管理） | PUT /api/admin/activities/:id | 同上字段（部分传） | {activity:{...}} | 404/400/1012 |
-| 发布活动（管理） | POST /api/admin/activities/:id/publish | — | {activity:{...}}（status 变 published） | 403/404/1002 |
-| 下架活动（管理） | POST /api/admin/activities/:id/offline | — | {activity:{...}}（status 变 offline） | 403/404 |
-| 活动统计（管理） | GET /api/admin/activities/:id/stats | — | {confirmed, cancelled, remaining...}（以实现为准） | 403/404 |
-| 报名名单（管理） | GET /api/admin/activities/:id/signups | page/pageSize/status | total+list:[{id, signupNo, status, phone（operator 看脱敏 138****5678）, remark, createdAt, cancelledAt, user:{id, nickname}}] | 403 |
-| 名单导出（管理） | GET /api/admin/activities/:id/signups/export | — | CSV 文件流（完整手机号需 activity:export，即 super_admin） | 403/1013 |
+| 活动详情（管理） | GET /api/admin/activities/:id | — | **data 直接是活动对象**（不是 data.activity） | 403/404 |
+| 新增活动（管理） | POST /api/admin/activities | {title（必填）, subtitle?, cover?, description?, location?, startAt, endAt, signupStartAt, signupEndAt, quota（>0）, status?（默认 draft）}——**字段驼峰，传 start_at 会 400**；报名截止不能晚于活动结束 | **HTTP 201，data 直接是活动对象** | 400/1002 |
+| 编辑活动（管理） | PUT /api/admin/activities/:id | 同上字段（部分传）；**建议把读到的 `version` 原样传回**——若与当前不一致返回 1012，防两人同时编辑互相覆盖 | **data 直接是活动对象** | 404/400/1012 |
+| 发布活动（管理） | POST /api/admin/activities/:id/publish | — | **data 直接是活动对象**（status 变 published；已是 published 返回 1009） | 403/404/1002/1009 |
+| 下架活动（管理） | POST /api/admin/activities/:id/offline | — | **data 直接是活动对象**（status 变 offline；已是 offline 返回 1009） | 403/404/1009 |
+| 活动统计（管理） | GET /api/admin/activities/:id/stats | — | {activity:{...}, quota, **signedUp**（有效报名数）, cancelled, remaining, signupRate, cancellationRate, daily:[{day, count}], recent:[{signupNo, nickname, phone, createdAt}]} | 403/404 |
+| 报名名单（管理） | GET /api/admin/activities/:id/signups | page/pageSize/keyword/status(confirmed/cancelled) | total+list:[{id, signupNo, **userId, nickname, avatarUrl, userStatus**（平铺，无嵌套 user）, phone（operator 看脱敏 138****5678）, remark, status, statusLabel, createdAt, cancelledAt}]+summary:{confirmed, cancelled} | 403 |
+| 名单导出（管理） | GET /api/admin/activities/:id/signups/export | status/keyword 可选 | CSV 文件流（完整手机号需 activity:export；另有 activity:export_masked 权限导脱敏版） | 403/1013 |
 
 > 后台没有"删除活动"路由，前端不要调用；下线活动用 `POST /:id/offline`。
 > 使用方：小程序活动模块 → 任务1（李端）；活动管理页与名单导出 → 任务2（杨乐曈）。
@@ -235,9 +242,9 @@ schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一
 
 | 接口 | 方法+路径 | 请求参数 | data 返回 | 错误码 |
 |---|---|---|---|---|
-| 多轮对话 | POST /api/chat | {sessionId?（首传可不带）, question} | {answer, sessionId} | 400 |
+| 多轮对话 | POST /api/chat | {sessionId?（前端本地生成，如 `Date.now()-随机串`）, **messages:[{role:"user"/"assistant", content}]**（多轮上下文，不含欢迎语和占位消息；兼容单条 {question} 写法） | {**answer**, **reply**（=answer 的别名，前端读这个）, sessionId, **bikes**:[车型简要]（答案关联的在架车型卡片，可为空数组）} | 400 |
 
-约定：答案锚定库内车型数据（系统提示词注入在架车型 name/series/price），库外问题固定回复"暂无相关车型信息，您可以浏览车型列表"；问答写入 chat_log（user_id 引用 c_user.id）。使用方：小程序客服页 → 任务1（李端）。
+约定：答案锚定库内车型数据（系统提示词注入在架车型 name/category/cc/price），库外问题固定回复"暂无相关车型信息，您可以浏览车型列表"且 bikes 为空数组；问答写入 chat_log（user_id 引用 c_user.id，question 存最后一条用户消息、answer 存回复）。使用方：小程序客服页 → 任务1（李端）。
 
 ### 模块 7：AI 数据分析【D 已实现】
 
@@ -246,27 +253,27 @@ schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一
 | 接口 | 方法+路径 | data 返回 | 错误码 |
 |---|---|---|---|
 | 总览 | GET /api/admin/analytics/overview | {range, overview:{pv,uv,signups,...}, compare:{环比}} | 403 |
-| 模块热度 | GET /api/admin/analytics/modules | {range, list:[{module, label, pv}]} | 403 |
+| 模块热度 | GET /api/admin/analytics/modules | {range, list:[{module, **moduleLabel**（中文名，前端展示用这个）, pv, uv, avgDurationMs, pvShare}]} | 403 |
 | 访问趋势 | GET /api/admin/analytics/trend | {range, list:[{day, pv, uv, signups}]}（**日期字段为 day**） | 403 |
-| 转化漏斗 | GET /api/admin/analytics/funnel | {range, steps:[{label, order, count, dropRate...}]}（**读 data.steps**；可选参数 activityId） | 403 |
+| 转化漏斗 | GET /api/admin/analytics/funnel | {range, basis:"session", activityId, hasData, steps:[{order, key, label, description, **sessions**（每步会话数，前端读这个）, visitors, rateFromStart, rateFromPrev, dropRate}], overallConversion, biggestDrop}（可选参数 activityId） | 403 |
 | 渠道分布 | GET /api/admin/analytics/channels | {range, list} | 403 |
 | 汇总 | GET /api/admin/analytics/summary | 汇总指标+compare | 403 |
-| 最近解读 | GET /api/admin/analytics/insights/latest | {insight}（无记录时 insight 为 null） | 403 |
-| AI 分析解读 | POST /api/admin/analytics/interpret | {from?, to?, question?} | {insight:{id, range, summary, source, model, ...}}（**读 data.insight**） | 403/1014（3 秒限频） |
+| 最近解读 | GET /api/admin/analytics/insights/latest | {insight}（无记录时 insight 为 null；**只返回 {insight}，无 range**） | 403 |
+| AI 分析解读 | POST /api/admin/analytics/interpret | **`from` / `to` / `question` 放在 POST 请求体**（JSON body，不是 query） | {insight:{id, range, summary, source, model, ...}}（**读 data.insight**） | 403/1014（3 秒限频） |
 
 约定：数据来源为 `POST /api/track` 埋点（见下）；分析查看 operator 可用，**发起 AI 解读仅 super_admin**。使用方：数据分析页 → 任务2（杨乐曈）。
 
-### 模块 8：行为埋点【D 已实现，李端需接入】
+### 模块 8：行为埋点【D 已实现，小程序已接入】
 
 | 接口 | 方法+路径 | 请求参数 | data 返回 |
 |---|---|---|---|
 | 上报行为 | POST /api/track | {event, ts?, module?, bikeId?/activityId?, sessionId?} | {tracked:true/false} |
 
-约定：前端只传 `{event, ...}`，后端自动生成会话（登录用户+当天）。event 取值：
+约定：前端只传 `{event, ...}`。未传 sessionId 时，后端按 **IP + User-Agent + 当天**生成默认会话，**登录前后沿用同一个默认会话**（保证"未登录点报名 → 登录 → 报名成功"落进同一条漏斗）。event 取值：
 - `view` + module：`home / bike / bike_detail（带 bikeId）/ activity / activity_detail（带 activityId）/ mine / chat`
 - `signup_click`、`signup_success`（带 activityId）
 - `bike_sort`、`bike_price_filter`、`bike_tag_filter`
-不在白名单内的事件后端忽略（返回 tracked:false）。**李端需在首页、车型列表/详情、活动页、客服页、报名按钮处埋点**。
+不在白名单内的事件后端忽略（返回 tracked:false）。**小程序已接入页面浏览与报名事件埋点；当前待办是联调日用真实请求验证漏斗统计出数**。
 
 ## 四、联调约定
 
@@ -281,15 +288,18 @@ schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一
 
 1. **报名不采集姓名**：报名只传可选 `remark`，手机号从已授权账户读取；小程序的姓名输入框删除或改为可选备注。
 2. **时间格式为 ISO 8601**（D 已按此实现），前端统一转本地时间渲染；分析接口 from/to 用 `YYYY-MM-DD`。
-3. **重复收藏错误码为 1015**（1006 已被 D 占用为"账号已存在"）。
-4. **后台无删除活动接口**，下线一律用 offline。
-5. 数据库为 SQLite，与 D 保持一致；任务3 的建表 SQL 也用 SQLite 语法。
+3. **C 端接口按小程序现状定稿**：首页聚合 `GET /api/home`、收藏切换式 `/api/bikes/:id/favorite`（幂等）、客服 `messages`/`reply`/`bikes`、筛选 `GET /api/bikes/filters`、车型字段 `category` 与 `favorited`。秦旭实现时照做，李端无需改代码。
+4. **重复收藏错误码 1015 保留**：收藏接口幂等，正常操作不会触发 1015。
+5. **后台无删除活动接口**，下线一律用 offline；编辑活动建议回传 `version` 以启用 1012 并发保护。
+6. 数据库为 SQLite，与 D 保持一致；任务3 的建表 SQL 也用 SQLite 语法。
 
 ## 六、待确认项
 
 | 项目 | 契约规定 | 需确认的点 |
 |---|---|---|
-| 模块 2/3/4/6（任务3 未实现） | 字段已按驼峰定稿 | 李端/杨乐曈先按本文档开发页面，联调时以秦旭实现为准 |
-| 埋点接入进度 | 李端按模块 8 埋点 | 李端确认各页面已埋、事件名对得上 |
+| 模块 2/3/4/6（任务3 未实现） | 已按小程序现有调用形状定稿（/api/home、切换式收藏、messages/reply） | 秦旭按文档实现，联调时逐个接口验证 |
+| 车型字段 series→category | 全文统一 category，series 作废 | 杨乐曈后台管理页按 category 开发 |
+| 收藏幂等 | 重复收藏/取消都返回成功，不再用 1015 | 杨乐曈注意错误码表 1015 标注已预留 |
 | AI 解读放开 | 仅 super_admin | D 确认 operator 是否放开 |
 | 上传图片目录 | `/uploads/年/月/xxx.jpg` | 秦旭实现时与 D 的静态目录（server/public）对齐 |
+| 漏斗验证 | 埋点已接，联调日用真实请求验证出数 | 李端/杨乐曈联调时确认分析页有数 |
