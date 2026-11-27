@@ -15,6 +15,11 @@
  *   - 登录角色读 data.admin.role 并落本地；会话失效同时清 token 与角色
  *   - 活动适配读 startAt / signupCount / phase；账户状态用 active/disabled 字符串枚举
  *   - 用户状态走 PATCH，禁用附 reason；CSV 导出走 Bearer + Blob，URL 不带 token
+ *
+ * 复审修复（组长 c2be4f2 复审意见）：
+ *   - [P1] 401 只清理「请求所属会话仍是当前会话」的登录态，旧请求的延迟 401 不再清掉新登录
+ *   - [P2] 401 处理前置到 blob/json 分流之前，CSV 导出遇 401 同样清理会话
+ *   - [P2] 权限判断先要求有有效会话，未登录时 canInterpret() 不再误返回 true
  * ============================================================ */
 
 /* ---------- 全局配置：联调时只改这里 ---------- */
@@ -102,6 +107,15 @@ async function request(path, opts = {}) {
     throw e;
   }
 
+  // 鉴权失败：放在 blob / json 分流之前，让 CSV 导出与 JSON 请求走同一套会话清理。
+  // 只有「该请求所属会话仍是当前会话」才清理——请求带的 token 与当前 token 一致才说明
+  // 是当前登录态失效；否则是旧会话请求的延迟 401，不能清掉用户后来重新登录的 token/角色。
+  if (res.status === 401) {
+    if (token && Token.get() === token) Token.clearAll();
+    if (!silent) toast('登录已过期，请重新登录');
+    throw new Error('UNAUTHORIZED');
+  }
+
   // 名单导出是 CSV 文件流，不走信封
   if (responseType === 'blob') {
     if (!res.ok) { if (!silent) toast('导出失败：HTTP ' + res.status); throw new Error('HTTP ' + res.status); }
@@ -112,11 +126,6 @@ async function request(path, opts = {}) {
   try { payload = await res.json(); }
   catch (e) { if (!silent) toast('返回不是合法 JSON'); throw e; }
 
-  if (res.status === 401) {
-    Token.clearAll();   // token 与角色一起清，防止界面残留旧权限
-    if (!silent) toast('登录已过期，请重新登录');
-    throw new Error('UNAUTHORIZED');
-  }
   if (payload.code !== API_CONFIG.successCode) {
     if (!silent) toast(payload.message || ('请求失败：' + payload.code));
     const err = new Error(payload.message || 'BUSINESS_ERROR');
@@ -252,12 +261,15 @@ const Api = {
  * 不一致——以组长定稿为准：手机号导出仅 super_admin；此点待 D 收紧服务端后一致。
  */
 const Perm = {
+  // 权限判断先要求存在有效会话：无 token 一律视为无权限，避免清空会话后
+  // 缺省 role='operator' 让 canInterpret() 误返回 true
+  hasSession: () => Boolean(Token.get()),
   role:   () => Token.getRole() || 'operator',
   setRole: r => Token.setRole(r),
-  canExportPhone: () => Perm.role() === 'super_admin',
-  canManageAdmins: () => Perm.role() === 'super_admin',
+  canExportPhone: () => Perm.hasSession() && Perm.role() === 'super_admin',
+  canManageAdmins: () => Perm.hasSession() && Perm.role() === 'super_admin',
   // AI 解读当前服务端两角色均可用；待组内确认后与文档/服务端/界面同步
-  canInterpret: () => Perm.role() === 'super_admin' || Perm.role() === 'operator'
+  canInterpret: () => Perm.hasSession() && (Perm.role() === 'super_admin' || Perm.role() === 'operator')
 };
 
 /* ---------- 图片 URL：后端存相对地址，展示时拼 baseURL ---------- */
