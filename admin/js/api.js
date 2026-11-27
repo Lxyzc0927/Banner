@@ -25,6 +25,10 @@
  *   - [P2] canInterpret() 只对已登录的 super_admin 返回 true（operator 调解读接口 403）
  *   - [P2] 引入会话版本号：每次登录/退出递增，401 只在版本仍匹配时清理，
  *          解决同秒重登签发相同 JWT 时 token 比较无法区分两次登录的问题
+ *
+ * 复审修复（组长 09190e8 复审意见）：
+ *   - [P2] 为每次登录尝试分配序号，退出会使在途尝试失效；退出后才返回的登录响应不再恢复会话
+ *   - [P3] 401 的清理与「登录已过期」提示都限定在当前会话，旧请求的延迟 401 不再误报
  * ============================================================ */
 
 /* ---------- 全局配置：联调时只改这里 ---------- */
@@ -73,6 +77,13 @@ const API = {
  * 都会递增版本；请求发出时记录当时的版本，401 时只有版本仍匹配才清理会话，
  * 这样迟到的旧请求 401 就不会误清新会话。
  */
+
+/* 登录尝试序号：内存态，不落 localStorage。
+ * 每次发起 login 递增，退出也递增；只有序号仍等于当前值的登录响应才允许写入会话。
+ * 这样「先发起登录 → 再退出 → 登录响应迟到」时，旧尝试不会把 token/角色装回去；
+ * 连续发起多次登录时也只有最后一次尝试有效。 */
+let loginAttemptSeq = 0;
+
 const Token = {
   get()      { return localStorage.getItem(API_CONFIG.tokenKey) || ''; },
   set(t)     { localStorage.setItem(API_CONFIG.tokenKey, t); },
@@ -126,10 +137,14 @@ async function request(path, opts = {}) {
   // 鉴权失败：放在 blob / json 分流之前，让 CSV 导出与 JSON 请求走同一套会话清理。
   // 用会话版本而非 token 判断是否为当前会话：同秒重登会签发完全相同的 JWT，token 比较
   // 区分不出两次登录。只有「请求发出时的会话版本 === 当前版本」才说明是当前登录态失效，
-  // 才清理 token/角色；否则是旧会话请求的延迟 401，不能清掉用户后来重新登录的会话。
+  // 才清理 token/角色并提示；否则是旧会话请求的延迟 401，既不清理用户后来重新登录的会话，
+  // 也不弹出「登录已过期」误导用户。
   if (res.status === 401) {
-    if (sessionVersion === Token.version()) Token.clearAll();
-    if (!silent) toast('登录已过期，请重新登录');
+    const isCurrentSession = sessionVersion === Token.version();
+    if (isCurrentSession) {
+      Token.clearAll();
+      if (!silent) toast('登录已过期，请重新登录');
+    }
     throw new Error('UNAUTHORIZED');
   }
 
@@ -191,7 +206,13 @@ const Adapt = {
  */
 const Api = {
   async login(username, password) {
+    // 记录本次尝试序号：等待响应期间若用户退出（或又发起新登录），序号会变化，
+    // 迟到的成功响应必须丢弃，否则会把 token/角色写回已退出的会话。
+    const attempt = ++loginAttemptSeq;
     const data = await request(API.login, { method: 'POST', body: { username, password } });
+    if (attempt !== loginAttemptSeq) {
+      throw new Error('LOGIN_SUPERSEDED');   // 尝试已作废，不恢复会话
+    }
     // 先递增会话版本，再写入新 token/角色：让此前发出的旧请求 401 无法清理这次新登录
     Token.bump();
     Token.set(data.token);
@@ -201,8 +222,9 @@ const Api = {
     return data;   // { token, admin: { id, username, role, ... } }
   },
 
-  // 退出登录：递增版本使在途请求失效，再清理 token/角色
+  // 退出登录：使在途登录尝试失效、递增会话版本使在途请求失效，再清理 token/角色
   async logout() {
+    loginAttemptSeq++;
     Token.bump();
     Token.clearAll();
   },
