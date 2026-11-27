@@ -222,10 +222,15 @@ function funnel(db, range, { activityId = null } = {}) {
     { key: 'step4', label: '点击报名', description: '在详情页点击报名按钮' },
     { key: 'step5', label: '报名成功', description: '服务端校验通过并创建报名记录' },
   ];
+  const first = row.step1 || 0;
+  const hasData = first > 0;
   const steps = definitions.map((def, index) => {
     const count = row[def.key] || 0;
     const prev = index === 0 ? count : row[definitions[index - 1].key] || 0;
-    const first = row.step1 || 0;
+    const hasPrev = index === 0 ? hasData : prev > 0;
+    const rateFromPrev = index === 0
+      ? (hasData ? 100 : null)
+      : (prev > 0 ? pct(count, prev) : null);
     return {
       order: index + 1,
       key: def.key,
@@ -233,20 +238,24 @@ function funnel(db, range, { activityId = null } = {}) {
       description: def.description,
       sessions: count,
       visitors: row[`visitors${index + 1}`] || 0,
-      rateFromStart: pct(count, first),
-      rateFromPrev: index === 0 ? 100 : pct(count, prev),
-      dropRate: index === 0 ? 0 : round(100 - pct(count, prev), 2),
+      rateFromStart: hasData ? pct(count, first) : null,
+      rateFromPrev,
+      dropRate: index === 0
+        ? (hasData ? 0 : null)
+        : (!hasPrev || rateFromPrev === null ? null : round(100 - rateFromPrev, 2)),
     };
   });
-  const biggestDrop = steps
-    .slice(1)
-    .reduce((worst, step) => (step.dropRate > worst.dropRate ? step : worst), steps[1] || steps[0]);
+  const candidates = steps.slice(1).filter((step) => step.dropRate !== null && step.dropRate !== undefined);
+  const biggestDrop = candidates.length
+    ? candidates.reduce((worst, step) => (step.dropRate > worst.dropRate ? step : worst), candidates[0])
+    : null;
 
   return {
     basis: 'session',
     activityId,
+    hasData,
     steps,
-    overallConversion: pct(row.step5 || 0, row.step1 || 0),
+    overallConversion: hasData ? pct(row.step5 || 0, first) : null,
     biggestDrop: biggestDrop
       ? { label: biggestDrop.label, dropRate: biggestDrop.dropRate, from: steps[biggestDrop.order - 2]?.label }
       : null,

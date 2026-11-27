@@ -49,7 +49,7 @@ const config = {
   adminDir: path.join(serverDir, 'public', 'admin'),
   reportsDir: path.join(ROOT_DIR, 'reports'),
   port: int('PORT', 3000),
-  host: process.env.HOST || '0.0.0.0',
+  host: process.env.HOST || '127.0.0.1',
   dbPath,
   jwt: {
     secret: process.env.JWT_SECRET || 'dev-only-change-me-please-32-chars',

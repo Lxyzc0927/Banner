@@ -192,6 +192,8 @@
         button.classList.remove('hidden');
       }
     });
+    const canInterpret = Array.isArray(admin.permissions) && admin.permissions.includes('analytics:interpret');
+    $('#ai-generate').classList.toggle('hidden', !canInterpret);
   }
 
   function logout(showToast = true) {
@@ -358,6 +360,11 @@
       container.innerHTML = '<div class="empty-state"><strong>暂无漏斗数据</strong><p>需要首页、活动列表、详情、报名点击与成功事件。</p></div>';
       return;
     }
+    if (funnel.hasData === false || funnel.steps[0]?.sessions === 0) {
+      $('#funnel-overall').textContent = '暂无数据';
+      container.innerHTML = '<div class="empty-state"><strong>当前区间没有访问数据</strong><p>生成模拟数据或接入真实埋点后，这里会显示五步转化漏斗。</p></div>';
+      return;
+    }
     $('#funnel-overall').textContent = `总转化 ${pct(funnel.overallConversion)}`;
     container.innerHTML = funnel.steps
       .map(
@@ -365,12 +372,12 @@
         <div class="funnel-step">
           <div class="funnel-top">
             <strong>${index + 1}. ${escapeHtml(step.label)}</strong>
-            <span>${num(step.sessions)} 会话 · ${pct(step.rateFromStart)}${
-              index > 0 ? ` · <span class="funnel-drop">流失 ${pct(step.dropRate)}</span>` : ''
+            <span>${num(step.sessions)} 会话 · ${step.rateFromStart == null ? '—' : pct(step.rateFromStart)}${
+              index > 0 && step.dropRate != null ? ` · <span class="funnel-drop">流失 ${pct(step.dropRate)}</span>` : ''
             }</span>
           </div>
           <div class="funnel-track">
-            <div class="funnel-fill" style="width:${Math.max(4, step.rateFromStart)}%"><span>${num(step.sessions)}</span></div>
+            <div class="funnel-fill" style="width:${Math.max(4, step.rateFromStart || 0)}%"><span>${num(step.sessions)}</span></div>
           </div>
         </div>`,
       )

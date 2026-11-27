@@ -2,6 +2,24 @@
 
 const { startServer } = require('./app');
 const { config } = require('./config');
+const { validateBindConfig } = require('./security');
+
+const safety = validateBindConfig({
+  host: config.host,
+  defaultJwtSecret: config.jwt.isDefaultSecret,
+  adminPassword: config.seed.adminPassword,
+  operatorPassword: config.seed.operatorPassword,
+  wechatMock: config.wechat.mock,
+});
+if (safety.errors.length) {
+  console.error('\n✖ 启动被拒绝：当前监听地址不是本机，但演示默认配置仍在使用。');
+  for (const message of safety.errors) console.error(`  - ${message}`);
+  console.error('  只在本机演示请设置 HOST=127.0.0.1；需要局域网/公网访问，请先改 .env 后重试。\n');
+  process.exit(1);
+}
+for (const warning of safety.warnings) {
+  console.warn(`  [安全提醒] ${warning}`);
+}
 
 const { server, db } = startServer();
 

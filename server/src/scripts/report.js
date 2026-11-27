@@ -18,13 +18,20 @@ const { openDatabase } = require('../db');
 const { rangeOf, summary, compare } = require('../modules/analytics/service');
 const { generateInsight } = require('../modules/analytics/ai');
 const { toCsv } = require('../csv');
-const { formatLocalDateTime } = require('../time');
+const { formatLocalDateTime, localDay } = require('../time');
 
 function arg(name, fallback) {
   const index = process.argv.indexOf(`--${name}`);
   if (index === -1) return fallback;
   const value = Number(process.argv[index + 1]);
   return Number.isFinite(value) ? value : fallback;
+}
+
+function stringArg(name, fallback) {
+  const index = process.argv.indexOf(`--${name}`);
+  if (index === -1) return fallback;
+  const value = process.argv[index + 1];
+  return value && !value.startsWith('--') ? value : fallback;
 }
 
 function mdTable(headers, rows) {
@@ -42,8 +49,10 @@ function writeCsv(file, headers, rows) {
 
 function main() {
   const days = Math.min(90, Math.max(1, arg('days', 14)));
+  const to = stringArg('to', localDay());
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(to)) throw new Error('--to 格式应为 YYYY-MM-DD');
   const db = openDatabase();
-  const range = rangeOf(days);
+  const range = rangeOf(days, to);
   const bundle = summary(db, range);
   bundle.compare = compare(db, range);
 
@@ -105,8 +114,8 @@ ${mdTable(
   bundle.funnel.steps.map((step) => [step.label, step.sessions, `${step.rateFromStart}%`, `${step.rateFromPrev}%`, `${step.dropRate}%`]),
 )}
 
-- 总体转化率：**${bundle.funnel.overallConversion}%**
-- 最大流失环节：**${bundle.funnel.biggestDrop?.from || '—'} → ${bundle.funnel.biggestDrop?.label || '—'}（流失 ${bundle.funnel.biggestDrop?.dropRate || 0}%）**
+- 总体转化率：**${bundle.funnel.hasData ? `${bundle.funnel.overallConversion}%` : '无数据（首页会话为 0）'}**
+- 最大流失环节：**${bundle.funnel.biggestDrop ? `${bundle.funnel.biggestDrop.from} → ${bundle.funnel.biggestDrop.label}（流失 ${bundle.funnel.biggestDrop.dropRate}%）` : '无数据'}**
 
 ## 五、渠道来源
 
@@ -174,7 +183,7 @@ ${insight.meta?.fallbackReason ? `> 规则兜底原因：${insight.meta.fallback
 
     console.log('✔ 报告生成完成');
     console.log(`  区间: ${bundle.range.from} ~ ${bundle.range.to}`);
-    console.log(`  核心: PV ${overview.pv} · UV ${overview.uv} · 报名 ${overview.signups} · 漏斗转化 ${bundle.funnel.overallConversion}%`);
+    console.log(`  核心: PV ${overview.pv} · UV ${overview.uv} · 报名 ${overview.signups} · 漏斗转化 ${bundle.funnel.hasData ? `${bundle.funnel.overallConversion}%` : '无数据'}`);
     console.log(`  AI: ${insight.source === 'llm' ? `大模型 ${insight.model}` : '规则兜底'}`);
     console.log(`  目录: ${config.reportsDir}`);
     db.close();

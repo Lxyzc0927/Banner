@@ -19,7 +19,7 @@ function bindPhone(db, userId, phone) {
 }
 
 function register(router) {
-  router.post('/api/auth/wechat/login', async (ctx) => {
+  const wechatLoginHandler = async (ctx) => {
     const body = asObject(ctx.body || {});
     const code = string(body.code, 'code', { required: true, max: 512 });
     const nickname = string(body.nickname, 'nickname', { max: 40 });
@@ -89,9 +89,13 @@ function register(router) {
       user: publicUser(result.user),
       mock: Boolean(session.mock),
     });
-  });
+  };
 
-  router.post('/api/auth/wechat/phone', requireUser, async (ctx) => {
+  // 兼容小程序现有调用：/api/auth/wx-login
+  router.post('/api/auth/wechat/login', wechatLoginHandler);
+  router.post('/api/auth/wx-login', wechatLoginHandler);
+
+  const wechatPhoneHandler = async (ctx) => {
     const body = asObject(ctx.body || {});
     const phoneCode = string(body.code, 'code', { max: 512 });
     const directPhone = body.phone ? parsePhone(body.phone) : null;
@@ -106,7 +110,11 @@ function register(router) {
     const user = ctx.db.prepare('SELECT * FROM c_user WHERE id = ?').get(ctx.user.id);
     audit(ctx, 'user.bind_phone', { targetType: 'c_user', targetId: user.id });
     ctx.ok({ user: publicUser(user), changed: true });
-  });
+  };
+
+  // 兼容小程序现有调用：/api/auth/phone
+  router.post('/api/auth/wechat/phone', requireUser, wechatPhoneHandler);
+  router.post('/api/auth/phone', requireUser, wechatPhoneHandler);
 
   router.get('/api/auth/me', requireUser, (ctx) => {
     const signupCount = ctx.db

@@ -134,6 +134,31 @@ function fallbackInsight(bundle) {
   const top = bundle.modules[0] || { moduleLabel: '暂无', pv: 0, pvShare: 0, avgDurationMs: 0 };
   const funnel = bundle.funnel;
   const drop = funnel.biggestDrop;
+  if (!funnel.hasData) {
+    return {
+      headline: '当前区间没有可分析的访问数据',
+      summary: `所选区间内首页访问会话数为 0，PV ${overview.pv}、UV ${overview.uv}。没有第一步数据时，转化率和流失率都没有统计意义，不能写成“100% 流失”。`,
+      findings: [
+        {
+          title: '漏斗数据为空',
+          evidence: '进入首页的会话数为 0，五个步骤均无有效样本。',
+          implication: '当前应优先确认埋点是否上报，或先生成模拟数据，而不是解读转化率。',
+        },
+      ],
+      recommendations: [
+        {
+          priority: 'P0',
+          action: '先执行 npm run mock -- --clear --days 30 --sessions 1800 --seed 42 生成模拟数据，或检查小程序首页埋点是否上报。',
+          owner: '后端',
+          expectedImpact: '补齐首页访问事件后，才能计算模块热度与转化漏斗。',
+        },
+      ],
+      risks: [
+        '空区间不能计算转化率；接口对无数据步骤返回 null，而不是 0 或 100%。',
+      ],
+      confidence: 'low',
+    };
+  }
   const lastTrend = bundle.trend[bundle.trend.length - 1] || { pv: 0, uv: 0 };
   const recent = bundle.trend.slice(-7);
   const prior = bundle.trend.slice(-14, -7);
@@ -276,7 +301,9 @@ async function generateInsight(db, range, { question = '', adminId = null } = {}
   let model = 'rule-based-v1';
   let fallbackReason = null;
 
-  if (config.llm.apiKey) {
+  if (!bundle.funnel.hasData) {
+    fallbackReason = '当前区间无访问数据，跳过 LLM 调用';
+  } else if (config.llm.apiKey) {
     try {
       const result = await callLlm(buildPrompt(bundle, question));
       const parsed = stripJson(result.content);

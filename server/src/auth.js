@@ -24,9 +24,8 @@ const ROLE_PERMISSIONS = {
     'activity:read',
     'activity:write',
     'activity:publish',
-    'activity:export',
+    'activity:export_masked',
     'analytics:read',
-    'analytics:interpret',
   ]),
 };
 

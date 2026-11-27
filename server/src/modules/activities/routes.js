@@ -3,6 +3,7 @@
 const crypto = require('node:crypto');
 const { CODES, errors } = require('../../errors');
 const { requireAdmin, requireUser, optionalUser } = require('../../middleware');
+const { hasPermission } = require('../../auth');
 const {
   asObject,
   string,
@@ -138,6 +139,13 @@ function getActivityOrThrow(db, id) {
 
 function signupNumber(activityId) {
   return `S${activityId}-${Date.now().toString(36).toUpperCase()}${crypto.randomBytes(2).toString('hex').toUpperCase()}`;
+}
+
+/** 运营管理员只能看脱敏手机号；只有超级管理员可看完整手机号。 */
+function phoneView(ctx, phone) {
+  if (!phone) return phone;
+  if (hasPermission(ctx.admin?.role, 'activity:export')) return phone;
+  return String(phone).replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2');
 }
 
 function register(router) {
@@ -398,7 +406,7 @@ function register(router) {
       recent: recent.map((row) => ({
         signupNo: row.signup_no,
         nickname: row.nickname,
-        phone: row.phone,
+        phone: phoneView(ctx, row.phone),
         createdAt: row.created_at,
       })),
     });
@@ -453,7 +461,7 @@ function register(router) {
         nickname: s.nickname,
         avatarUrl: s.avatar_url,
         userStatus: s.user_status,
-        phone: s.phone,
+        phone: phoneView(ctx, s.phone),
         remark: s.remark,
         status: s.status,
         statusLabel: SIGNUP_STATUS_LABELS[s.status] || s.status,
@@ -467,7 +475,10 @@ function register(router) {
     });
   });
 
-  router.get('/api/admin/activities/:id/signups/export', requireAdmin('activity:export'), (ctx) => {
+  router.get('/api/admin/activities/:id/signups/export', requireAdmin('activity:read'), (ctx) => {
+    const fullPhone = hasPermission(ctx.admin.role, 'activity:export');
+    const canMasked = hasPermission(ctx.admin.role, 'activity:export_masked');
+    if (!fullPhone && !canMasked) throw errors.forbidden('当前角色没有名单导出权限');
     const id = integer(ctx.params.id, '活动 id', { required: true, min: 1 });
     const activity = getActivityOrThrow(ctx.db, id);
     const status = enumValue(ctx.query.status, 'status', ['confirmed', 'cancelled'], { defaultValue: null });
@@ -498,7 +509,7 @@ function register(router) {
         activity.title,
         s.user_id,
         s.nickname,
-        s.phone,
+        fullPhone ? s.phone : phoneView(ctx, s.phone),
         SIGNUP_STATUS_LABELS[s.status] || s.status,
         formatLocalDateTime(s.created_at),
         formatLocalDateTime(s.cancelled_at),
@@ -508,7 +519,7 @@ function register(router) {
     audit(ctx, 'activity.export_signups', {
       targetType: 'activity',
       targetId: id,
-      detail: { count: rows.length, status: status || 'all' },
+      detail: { count: rows.length, status: status || 'all', phone: fullPhone ? 'full' : 'masked' },
     });
     const filename = `activity-${id}-signups-${localDay()}.csv`;
     ctx.buffer(Buffer.from(csv, 'utf8'), 'text/csv; charset=utf-8', filename);

@@ -197,8 +197,8 @@ function register(router) {
     });
   });
 
-  // C 端：我的报名
-  router.get('/api/users/me/signups', requireUser, (ctx) => {
+  // C 端：我的报名；同时兼容小程序现有的 /api/signups/mine
+  const mySignupsHandler = (ctx) => {
     const { page, pageSize, offset } = pagination(ctx.query);
     const total = ctx.db.prepare('SELECT COUNT(*) AS count FROM signup WHERE user_id = ?').get(ctx.user.id).count;
     const rows = ctx.db
@@ -232,7 +232,10 @@ function register(router) {
       page,
       pageSize,
     });
-  });
+  };
+
+  router.get('/api/users/me/signups', requireUser, mySignupsHandler);
+  router.get('/api/signups/mine', requireUser, mySignupsHandler);
 
   router.get('/api/users/me', requireUser, (ctx) => {
     ctx.ok({ user: publicUser(ctx.user) });

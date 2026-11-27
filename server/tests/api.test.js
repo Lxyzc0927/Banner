@@ -14,6 +14,8 @@ const { openDatabase } = require('../src/db');
 const { createApp } = require('../src/app');
 const { hashPassword } = require('../src/auth');
 const { nowIso, addDays, localDay } = require('../src/time');
+const { funnel } = require('../src/modules/analytics/service');
+const { validateBindConfig } = require('../src/security');
 
 let db;
 let server;
@@ -171,6 +173,28 @@ describe('基础与后台账号', () => {
     assert.ok(meta.body.data.modules.includes('activities'));
   });
 
+  test('非本机监听必须替换示例密钥和后台密码', () => {
+    const unsafe = validateBindConfig({
+      host: '0.0.0.0',
+      defaultJwtSecret: true,
+      adminPassword: 'Admin@123456',
+      operatorPassword: 'Operator@123',
+      wechatMock: true,
+    });
+    assert.equal(unsafe.loopback, false);
+    assert.ok(unsafe.errors.length >= 2);
+    assert.ok(unsafe.warnings.some((item) => item.includes('WECHAT_MOCK')));
+
+    const local = validateBindConfig({
+      host: '127.0.0.1',
+      defaultJwtSecret: true,
+      adminPassword: 'Admin@123456',
+      operatorPassword: 'Operator@123',
+      wechatMock: true,
+    });
+    assert.equal(local.errors.length, 0);
+  });
+
   test('后台登录：错误密码返回 1001，正确密码返回 token', async () => {
     const wrong = await api('/api/auth/admin/login', {
       method: 'POST',
@@ -242,6 +266,27 @@ describe('C 端登录、手机号授权与禁用', () => {
 
     const me = await api('/api/auth/me', { token: first.body.data.token });
     assert.equal(me.body.data.user.phone, '13911112222');
+  });
+
+  test('兼容小程序现有路径：wx-login / phone / signups/mine', async () => {
+    const login = await api('/api/auth/wx-login', {
+      method: 'POST',
+      body: { code: 'mock:alias-user', phoneCode: 'mock:13944440001' },
+    });
+    assert.equal(login.body.code, 0);
+    assert.equal(login.body.data.phoneBound, true);
+
+    const phone = await api('/api/auth/phone', {
+      method: 'POST',
+      token: login.body.data.token,
+      body: { phone: '13944440002' },
+    });
+    assert.equal(phone.body.code, 0);
+    assert.equal(phone.body.data.user.phone, '13944440002');
+
+    const mine = await api('/api/signups/mine', { token: login.body.data.token });
+    assert.equal(mine.body.code, 0);
+    assert.ok(Array.isArray(mine.body.data.list));
   });
 
   test('一个手机号只能绑定一个微信账号', async () => {
@@ -500,6 +545,33 @@ describe('报名统计与名单导出', () => {
     const denied = await api('/api/admin/admins', { token: operatorToken });
     assert.equal(denied.status, 403);
   });
+
+  test('operator 只能看脱敏手机号；完整 CSV 和 AI 解读仅超级管理员可用', async () => {
+    const activity = insertActivity({ title: '手机号脱敏测试', quota: 5 });
+    const user = await loginUserWithPhone('mock:mask-user', '13955550001');
+    await api(`/api/activities/${activity}/signup`, { method: 'POST', token: user.body.data.token });
+
+    const operatorList = await api(`/api/admin/activities/${activity}/signups`, { token: operatorToken });
+    assert.equal(operatorList.body.data.list[0].phone, '139****0001');
+
+    const superList = await api(`/api/admin/activities/${activity}/signups`, { token: superToken });
+    assert.equal(superList.body.data.list[0].phone, '13955550001');
+
+    const operatorExport = await api(`/api/admin/activities/${activity}/signups/export`, { token: operatorToken });
+    assert.equal(operatorExport.status, 200);
+    assert.ok(operatorExport.text.includes('139****0001'));
+    assert.ok(!operatorExport.text.includes('13955550001'));
+
+    const superExport = await api(`/api/admin/activities/${activity}/signups/export`, { token: superToken });
+    assert.ok(superExport.text.includes('13955550001'));
+
+    const aiDenied = await api('/api/admin/analytics/interpret', {
+      method: 'POST',
+      token: operatorToken,
+      body: {},
+    });
+    assert.equal(aiDenied.status, 403);
+  });
 });
 
 describe('访问分析：模块热度、趋势、漏斗与 AI 解读', () => {
@@ -543,6 +615,25 @@ describe('访问分析：模块热度、趋势、漏斗与 AI 解读', () => {
     }
   });
 
+  test('空区间漏斗返回 null，不应报告 100% 流失', () => {
+    const empty = openDatabase(':memory:');
+    try {
+      const result = funnel(empty, {
+        from: '2026-01-01',
+        to: '2026-01-02',
+        fromIso: '2026-01-01T00:00:00.000Z',
+        toIso: '2026-01-02T23:59:59.999Z',
+      });
+      assert.equal(result.hasData, false);
+      assert.equal(result.overallConversion, null);
+      assert.equal(result.biggestDrop, null);
+      assert.ok(result.steps.every((step) => step.dropRate === null));
+      assert.ok(result.steps.every((step) => step.rateFromPrev === null));
+    } finally {
+      empty.close();
+    }
+  });
+
   test('summary 返回模块热度、趋势与严格顺序漏斗', async () => {
     const summary = await api('/api/admin/analytics/summary', { token: superToken });
     assert.equal(summary.body.code, 0);
@@ -578,6 +669,22 @@ describe('访问分析：模块热度、趋势、漏斗与 AI 解读', () => {
     const latest = await api('/api/admin/analytics/insights/latest', { token: superToken });
     assert.equal(latest.body.data.insight.source, 'fallback');
     assert.ok(latest.body.data.insight.summary.length > 10);
+  });
+
+  test('小程序埋点 /api/track 写入 visit_event', async () => {
+    const before = db.prepare("SELECT COUNT(*) AS c FROM visit_event WHERE action = 'bike_sort'").get().c;
+    const tracked = await api('/api/track', {
+      method: 'POST',
+      body: { event: 'bike_sort', sort: 'price_asc' },
+    });
+    assert.equal(tracked.body.code, 0);
+    assert.equal(tracked.body.data.tracked, true);
+    const after = db.prepare("SELECT COUNT(*) AS c FROM visit_event WHERE action = 'bike_sort'").get().c;
+    assert.equal(after, before + 1);
+    const row = db
+      .prepare("SELECT module, page, action FROM visit_event WHERE action = 'bike_sort' ORDER BY id DESC LIMIT 1")
+      .get();
+    assert.deepEqual({ ...row }, { module: 'bike', page: 'bike_list', action: 'bike_sort' });
   });
 });
 
