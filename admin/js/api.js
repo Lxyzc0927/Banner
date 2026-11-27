@@ -32,6 +32,10 @@
  *
  * 复审修复（组长 df5b8a0 复审意见）：
  *   - [P2] 登录尝试标识改存 localStorage（跨标签页共享），另一标签页退出也能作废旧登录响应
+ *
+ * 复审修复（组长 39530d0 复审意见）：
+ *   - [P3] 会话记录绑定「退出版本」，读取 token/角色时校验版本；
+ *          即使另一页在校验通过后、写入前退出，迟到写入的会话也无法被读到
  * ============================================================ */
 
 /* ---------- 全局配置：联调时只改这里 ---------- */
@@ -42,6 +46,8 @@ const API_CONFIG = {
   roleKey: 'admin_role',                           // localStorage 中角色的键名（登录时保存）
   sessionVersionKey: 'admin_session_version',      // 会话版本号：区分同秒重登签发的相同 JWT
   loginAttemptKey: 'admin_login_attempt',          // 登录尝试标识：跨标签页共享，退出时换新使在途登录失效
+  logoutVersionKey: 'admin_logout_version',        // 退出版本：只由退出递增，用于绑定会话记录
+  sessionOwnerKey: 'admin_session_owner',          // 会话记录绑定的退出版本，读取 token/角色时校验
   successCode: 0,                                  // code === 0 视为成功
   timeout: 10000
 };
@@ -84,11 +90,37 @@ const API = {
  */
 
 const Token = {
-  get()      { return localStorage.getItem(API_CONFIG.tokenKey) || ''; },
+  // 退出版本只由退出递增。会话记录写入时绑定发起登录时的退出版本，读取时若绑定版本
+  // 与当前版本不一致就当作无会话，堵住「校验通过后、写入前被另一页退出」的窄窗口。
+  logoutVersion() { return Number(localStorage.getItem(API_CONFIG.logoutVersionKey) || 0); },
+  bumpLogoutVersion() {
+    const v = this.logoutVersion() + 1;
+    localStorage.setItem(API_CONFIG.logoutVersionKey, String(v));
+    return v;
+  },
+  sessionValid() {
+    const owner = localStorage.getItem(API_CONFIG.sessionOwnerKey);
+    return owner !== null && Number(owner) === this.logoutVersion();
+  },
+  get()     { return this.sessionValid() ? (localStorage.getItem(API_CONFIG.tokenKey) || '') : ''; },
+  getRole() { return this.sessionValid() ? (localStorage.getItem(API_CONFIG.roleKey) || '') : ''; },
   set(t)     { localStorage.setItem(API_CONFIG.tokenKey, t); },
   clear()    { localStorage.removeItem(API_CONFIG.tokenKey); },
-  getRole()  { return localStorage.getItem(API_CONFIG.roleKey) || ''; },
   setRole(r) { if (r) localStorage.setItem(API_CONFIG.roleKey, r); },
+  // 写入会话时每写一步都复查退出版本；发现期间发生退出就回滚并抛错，
+  // 这样迟到的登录响应即使抢在校验后写入，也不会留下可读的会话。
+  setSession(t, r, exitVersion) {
+    const stillValid = () => exitVersion === this.logoutVersion();
+    if (!stillValid()) throw new Error('SESSION_INVALIDATED');
+    localStorage.setItem(API_CONFIG.tokenKey, t);
+    if (!stillValid()) { this.clearAll(); throw new Error('SESSION_INVALIDATED'); }
+    if (r) {
+      localStorage.setItem(API_CONFIG.roleKey, r);
+      if (!stillValid()) { this.clearAll(); throw new Error('SESSION_INVALIDATED'); }
+    }
+    localStorage.setItem(API_CONFIG.sessionOwnerKey, String(exitVersion));
+    if (!stillValid()) { this.clearAll(); throw new Error('SESSION_INVALIDATED'); }
+  },
   // 登录尝试标识：存 localStorage，多个标签页共享。每次登录/退出都换新标识，
   // 登录响应写入会话前校验标识仍是自己发起时的值；另一标签页退出也能作废旧尝试。
   newLoginAttempt() {
@@ -100,8 +132,12 @@ const Token = {
   // 会话版本：localStorage 存字符串，读取时转数字
   version()  { return Number(localStorage.getItem(API_CONFIG.sessionVersionKey) || 0); },
   bump()     { const v = this.version() + 1; localStorage.setItem(API_CONFIG.sessionVersionKey, String(v)); return v; },
-  // 会话失效时 token 与角色一起清理，避免界面残留旧权限（不改变版本，版本由调用方按语义递增）
-  clearAll() { localStorage.removeItem(API_CONFIG.tokenKey); localStorage.removeItem(API_CONFIG.roleKey); }
+  // 会话失效时 token、角色与归属标记一起清理（不改变版本，版本由调用方按语义递增）
+  clearAll() {
+    localStorage.removeItem(API_CONFIG.tokenKey);
+    localStorage.removeItem(API_CONFIG.roleKey);
+    localStorage.removeItem(API_CONFIG.sessionOwnerKey);
+  }
 };
 
 /* ---------- 统一请求封装 ----------
@@ -216,22 +252,24 @@ const Api = {
     // 在共享存储登记本次尝试：等待响应期间若任一标签页退出（或又发起新登录），
     // 标识会被换掉，迟到的成功响应必须丢弃，否则会把 token/角色写回共享会话。
     const attempt = Token.newLoginAttempt();
+    const exitVersion = Token.logoutVersion();   // 会话记录绑定发起登录时的退出版本
     const data = await request(API.login, { method: 'POST', body: { username, password } });
     if (attempt !== Token.loginAttempt()) {
       throw new Error('LOGIN_SUPERSEDED');   // 尝试已作废，不恢复会话
     }
     // 先递增会话版本，再写入新 token/角色：让此前发出的旧请求 401 无法清理这次新登录
     Token.bump();
-    Token.set(data.token);
     // 角色读 data.admin.role（服务端返回 { token, tokenType, expiresIn, admin: {...} }）
     const role = data && data.admin && data.admin.role;
-    if (role) Token.setRole(role);
+    Token.setSession(data.token, role, exitVersion);   // 写入时复查退出版本，跨页退出会使其失效
     return data;   // { token, admin: { id, username, role, ... } }
   },
 
-  // 退出登录：换新共享尝试标识使所有标签页的在途登录失效，递增会话版本使在途请求失效，再清理 token/角色
+  // 退出登录：换新共享尝试标识使所有标签页的在途登录失效，递增退出版本使旧会话记录失效，
+  // 递增会话版本使在途请求失效，再清理 token/角色
   async logout() {
     Token.newLoginAttempt();
+    Token.bumpLogoutVersion();
     Token.bump();
     Token.clearAll();
   },
