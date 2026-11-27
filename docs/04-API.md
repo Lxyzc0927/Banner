@@ -366,6 +366,8 @@ Authorization: Bearer <token>
 
 `GET /api/admin/users/:id/signups?page=1&pageSize=10`（需 `user:read`）
 
+手机号可见范围与活动侧一致：`super_admin` 看完整手机号，`operator` 看 `139****0001`。
+
 ### 4.5 C 端我的报名
 
 `GET /api/users/me/signups?page=1&pageSize=10`（需 C 端登录）

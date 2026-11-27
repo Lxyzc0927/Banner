@@ -1,8 +1,10 @@
-﻿# 07 · Git 分支上传与合并
+# 07 · Git 分支上传与合并
 
 > 组长的仓库已经在 `main` 上分好了四条分支。现在不需要 Pull Request：每个人在自己的分支里提交、推送，然后把分支合并回 `main` 即可。
 >
 > 目标仍然是：**四个人尽量不产生代码冲突，`main` 随时能演示。**
+>
+> ⚠️ **D 的分支如果曾经删除过 `miniprogram/` / `admin/`，不要直接合入 `main`。** 从最新 `main` 新建 `feature/lumenh26-integration`，只叠加 `server/` / `docs/` / `reports/`。合并前用 `git diff --name-status origin/main...HEAD` 确认没有 `D miniprogram/...` 或 `D admin/...`。
 
 ## 1. 先确认分支名
 
@@ -24,6 +26,40 @@ main
 ```
 
 下面命令里的 `<你的分支>` 替换成实际分支名，例如 `feat/activities`。
+
+### 1.1 D 的现有分支修复（不新建分支）
+
+D 的 `feature/lumenh26` 如果曾经删除过 `miniprogram/` 或 `admin/`，先把 main 的前端恢复到现有分支，再合并：
+
+```bash
+git fetch origin
+git switch feature/lumenh26
+
+# 从 main 恢复被删掉的前端目录
+git checkout origin/main -- miniprogram admin .impeccable DESIGN.md PRODUCT.md
+
+# 数据库不要进 Git（如果旧提交跟踪了）
+git rm --cached server/data/app.db 2>/dev/null || true
+
+# 再覆盖最新 D 后端与文档
+git add server docs reports package.json .env.example .gitignore README-D.md
+git commit -m "fix(d): 恢复小程序/管理后台并同步 D 后端"
+git push origin feature/lumenh26
+```
+
+合并前检查：
+
+```bash
+git diff --name-status origin/main...HEAD | Select-String '^D\s+(miniprogram|admin)/'
+```
+
+有输出就是危险：说明这次分支仍会删除前端，不要合并。没有输出再让组长合入 `main`。
+
+如果本机没有 Git，可以用 API 脚本重置现有分支（会 force 更新，先和组内确认）：
+
+```powershell
+node tools/push_via_api.js --reset --base main --branch feature/lumenh26
+```
 
 ## 2. 第一次拉代码
 
