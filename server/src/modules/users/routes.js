@@ -2,9 +2,16 @@
 
 const { errors } = require('../../errors');
 const { requireAdmin, requireUser, publicUser } = require('../../middleware');
+const { hasPermission } = require('../../auth');
 const { pagination, string, enumValue, integer, asObject } = require('../../validate');
 const { nowIso } = require('../../time');
 const { audit } = require('../../audit');
+
+function phoneView(ctx, phone) {
+  if (!phone) return phone;
+  if (hasPermission(ctx.admin?.role, 'activity:export')) return phone;
+  return String(phone).replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2');
+}
 
 function adminUserView(row) {
   return {
@@ -185,7 +192,7 @@ function register(router) {
         id: s.id,
         signupNo: s.signup_no,
         status: s.status,
-        phone: s.phone,
+        phone: phoneView(ctx, s.phone),
         remark: s.remark,
         createdAt: s.created_at,
         cancelledAt: s.cancelled_at,

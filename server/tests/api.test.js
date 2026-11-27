@@ -553,9 +553,15 @@ describe('报名统计与名单导出', () => {
 
     const operatorList = await api(`/api/admin/activities/${activity}/signups`, { token: operatorToken });
     assert.equal(operatorList.body.data.list[0].phone, '139****0001');
+    const userId = operatorList.body.data.list[0].userId;
+
+    const operatorUserSignups = await api(`/api/admin/users/${userId}/signups`, { token: operatorToken });
+    assert.equal(operatorUserSignups.body.data.list[0].phone, '139****0001');
 
     const superList = await api(`/api/admin/activities/${activity}/signups`, { token: superToken });
     assert.equal(superList.body.data.list[0].phone, '13955550001');
+    const superUserSignups = await api(`/api/admin/users/${userId}/signups`, { token: superToken });
+    assert.equal(superUserSignups.body.data.list[0].phone, '13955550001');
 
     const operatorExport = await api(`/api/admin/activities/${activity}/signups/export`, { token: operatorToken });
     assert.equal(operatorExport.status, 200);
