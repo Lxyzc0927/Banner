@@ -1,12 +1,20 @@
 /* ============================================================
  * api.js · 管理后台统一接口层（组员 B / 杨乐曈）
- * 依据：C 的 API.md v1.2 定稿版（以 D 的实现为基线），2026-11-27
+ * 依据：D 服务端 51bc0d3 实现为准 + 组长 11.27 联调修改意见（第 2 条），2026-11-27
  *
  * 用法：
  *   1) 所有接口路径集中在 API 常量里，最终定值时只改这一处。
- *   2) request() 自动处理：拼 baseURL、带 token、拆信封、非 0 弹 toast、401 跳登录。
+ *   2) request() 自动处理：拼 baseURL、带 Bearer token、拆信封、非 0 弹 toast、
+ *      401 同时清 token 与角色并跳登录。
  *   3) 现在 USE_MOCK = true，页面继续用 data.js 的假数据演示；
  *      联调当天把 USE_MOCK 改成 false、填好 baseURL，再按速查把各页面 fetch 接上即可。
+ *
+ * 本轮按联调意见对齐：
+ *   - 模块热度 /analytics/modules，AI 解读 /analytics/interpret（读 data.insight）
+ *   - 分析接口日期区间用 query: { from, to }
+ *   - 登录角色读 data.admin.role 并落本地；会话失效同时清 token 与角色
+ *   - 活动适配读 startAt / signupCount / phase；账户状态用 active/disabled 字符串枚举
+ *   - 用户状态走 PATCH，禁用附 reason；CSV 导出走 Bearer + Blob，URL 不带 token
  * ============================================================ */
 
 /* ---------- 全局配置：联调时只改这里 ---------- */
@@ -14,6 +22,7 @@ const API_CONFIG = {
   USE_MOCK: true,                                  // 联调时改为 false
   baseURL: 'http://127.0.0.1:3000',                // C 发局域网 IP 后替换；末尾不要带 /
   tokenKey: 'admin_token',                         // localStorage 中 token 的键名
+  roleKey: 'admin_role',                           // localStorage 中角色的键名（登录时保存）
   successCode: 0,                                  // code === 0 视为成功
   timeout: 10000
 };
@@ -37,18 +46,25 @@ const API = {
   users:        '/api/admin/users',
   userStatus:   id => `/api/admin/users/${id}/status`,
   admins:       '/api/admin/admins',
-  // 数据分析（D）
-  moduleHot:    '/api/admin/analytics/module-hot',
+  // 数据分析（D）—— 以服务端 51bc0d3 实际路由为准
+  moduleHot:    '/api/admin/analytics/modules',     // 原 module-hot → modules
   trend:        '/api/admin/analytics/trend',
   funnel:       '/api/admin/analytics/funnel',
-  interpret:    '/api/admin/analytics/interpretation'
+  interpret:    '/api/admin/analytics/interpret',   // 原 interpretation → interpret
+  // 小程序端（A）参考：手机号授权 / 我的报名
+  wxPhone:      '/api/auth/wechat/phone',          // POST { code } -> 绑定手机号
+  mySignups:    '/api/users/me/signups'            // GET 我的报名
 };
 
-/* ---------- token 存取 ---------- */
+/* ---------- 会话存取：token 与角色一起存、一起清 ---------- */
 const Token = {
   get()      { return localStorage.getItem(API_CONFIG.tokenKey) || ''; },
   set(t)     { localStorage.setItem(API_CONFIG.tokenKey, t); },
-  clear()    { localStorage.removeItem(API_CONFIG.tokenKey); }
+  clear()    { localStorage.removeItem(API_CONFIG.tokenKey); },
+  getRole()  { return localStorage.getItem(API_CONFIG.roleKey) || ''; },
+  setRole(r) { if (r) localStorage.setItem(API_CONFIG.roleKey, r); },
+  // 会话失效时 token 与角色同时清理，避免界面残留旧权限
+  clearAll() { localStorage.removeItem(API_CONFIG.tokenKey); localStorage.removeItem(API_CONFIG.roleKey); }
 };
 
 /* ---------- 统一请求封装 ----------
@@ -97,7 +113,7 @@ async function request(path, opts = {}) {
   catch (e) { if (!silent) toast('返回不是合法 JSON'); throw e; }
 
   if (res.status === 401) {
-    Token.clear();
+    Token.clearAll();   // token 与角色一起清，防止界面残留旧权限
     if (!silent) toast('登录已过期，请重新登录');
     throw new Error('UNAUTHORIZED');
   }
@@ -112,8 +128,12 @@ async function request(path, opts = {}) {
 
 /* ---------- 字段适配：把后端数据 normalize 成骨架字段 ----------
  * 接页面时若不想大改渲染逻辑，可在 fetch 后套这些函数。
- * 骨架字段 -> 定稿字段：name→title, date→start_at/end_at, admin/viewer→super_admin/operator
+ * 以 D 服务端 51bc0d3 的实际返回为准：
+ *   活动：title / startAt / signupCount / phase（不是 start_at / signup_count / status 直译）
+ *   账户状态：字符串枚举 active / disabled（不是 1 / 0）
+ *   角色：super_admin / operator
  */
+const PHASE_LABEL = { draft: '未开始', upcoming: '未开始', ongoing: '进行中', ended: '已结束', offline: '已下架' };
 const Adapt = {
   banner:  b => ({ id: b.id, title: b.title, image: b.image || '', link: b.link || '', sort: b.sort, status: b.status === 1 ? '上架' : '下架' }),
   bike:    b => ({ id: b.id, name: b.name, price: b.price / 100, cc: b.cc, status: b.status === 1 ? '上架' : '下架' }),
@@ -121,15 +141,19 @@ const Adapt = {
   yuanToFen: yuan => Math.round(Number(yuan) * 100),
   activity: a => ({
     id: a.id, name: a.title,
-    date: a.start_at ? String(a.start_at).slice(0, 10) : '',
-    signup: a.signup_count != null ? a.signup_count : (a.signups || 0),
+    date: a.startAt ? String(a.startAt).slice(0, 10) : '',
+    startAt: a.startAt, endAt: a.endAt,
+    signup: a.signupCount != null ? a.signupCount : (a.signups || 0),
     quota: a.quota,
-    status: a.status === 'published' ? '进行中' : a.status === 'offline' ? '已下架' : '未开始',
+    phase: a.phase,
+    status: PHASE_LABEL[a.phase] || (a.status === 'published' ? '进行中' : a.status === 'offline' ? '已下架' : '未开始'),
     rawStatus: a.status,
+    statusLabel: a.statusLabel,
     signupOpen: !!a.signupOpen
   }),
-  user: u => ({ id: u.id, name: u.nickname || u.name, phone: u.phone, status: u.status === 1 ? '正常' : '禁用' }),
-  admin: a => ({ id: a.id, name: a.username, role: a.role === 'super_admin' ? '超级管理员' : '运营', status: a.status === 1 ? '启用' : '禁用' })
+  // 状态为字符串枚举：active / disabled
+  user: u => ({ id: u.id, name: u.nickname || u.name, phone: u.phone, status: u.status === 'active' ? '正常' : '禁用', rawStatus: u.status, disabledReason: u.disabledReason || '' }),
+  admin: a => ({ id: a.id, name: a.username || a.name, role: a.role === 'super_admin' ? '超级管理员' : '运营管理员', rawRole: a.role, status: a.status === 'active' ? '启用' : '禁用', rawStatus: a.status })
 };
 
 /* ---------- 各模块调用方法（供页面直接调用） ----------
@@ -143,7 +167,10 @@ const Api = {
   async login(username, password) {
     const data = await request(API.login, { method: 'POST', body: { username, password } });
     Token.set(data.token);
-    return data;   // { token, role }
+    // 角色读 data.admin.role（服务端返回 { token, tokenType, expiresIn, admin: {...} }）
+    const role = data && data.admin && data.admin.role;
+    if (role) Token.setRole(role);
+    return data;   // { token, admin: { id, username, role, ... } }
   },
 
   banners: {
@@ -178,36 +205,59 @@ const Api = {
     signups: (id, q) => request(API.signups(id), { query: q, silent: true })
   },
   signups: {
-    exportCsv(id) {
-      // CSV 是信封例外，直接用带 token 的地址触发下载
-      const url = API_CONFIG.baseURL + API.exportUrl(id) + '?token=' + encodeURIComponent(Token.get());
+    /**
+     * 名单导出：CSV 是信封例外，带 Authorization: Bearer 请求后下载 Blob。
+     * token 不再拼进 URL（避免出现在日志/历史里）。
+     */
+    async exportCsv(id, q) {
+      const blob = await request(API.exportUrl(id), { query: q, responseType: 'blob', silent: true });
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement('a');
-      a.href = url; a.download = '报名名单_' + id + '.csv';
+      a.href = blobUrl; a.download = '报名名单_' + id + '.csv';
       document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      return blob;
     }
   },
 
   users: {
     list:   q => request(API.users, { query: q, silent: true }),
-    toggle: (id, status) => request(API.userStatus(id), { method: 'PUT', body: { status } }),
+    // 状态为字符串枚举 active / disabled；禁用时必传 reason
+    toggle: (id, status, reason) => {
+      const body = { status };
+      if (status === 'disabled') body.reason = reason;
+      return request(API.userStatus(id), { method: 'PATCH', body });
+    },
     admins: q => request(API.admins, { query: q, silent: true }),
     addAdmin: a => request(API.admins, { method: 'POST', body: a })
   },
 
   analytics: {
+    // 日期区间统一用 { from, to }；不传则服务端默认近 14 天
     moduleHot: q => request(API.moduleHot, { query: q, silent: true }),
     trend:     q => request(API.trend, { query: q, silent: true }),
-    funnel:    () => request(API.funnel, { silent: true }),
-    interpret: q => request(API.interpret, { method: 'POST', body: q || {} })
+    funnel:    q => request(API.funnel, { query: q, silent: true }),
+    // AI 解读返回 { insight }，这里读 data.insight
+    interpret: async q => {
+      const data = await request(API.interpret, { method: 'POST', body: q || {} });
+      return data && data.insight;
+    }
   }
 };
 
-/* ---------- 权限判断（按 v1.2 权限矩阵） ---------- */
+/* ---------- 权限判断（角色来自登录时保存的 data.admin.role） ----------
+ * 服务端现状（51bc0d3 auth.js）：super_admin 与 operator 均含 activity:export 与
+ * analytics:interpret 权限；仅 admin:read/admin:write 为 super_admin 独有。
+ * 组长意见第 3 条要求「含手机号 CSV 仅 super_admin 可导出」，与服务端当前权限
+ * 不一致——以组长定稿为准：手机号导出仅 super_admin；此点待 D 收紧服务端后一致。
+ */
 const Perm = {
-  role: () => localStorage.getItem('admin_role') || 'operator',
+  role:   () => Token.getRole() || 'operator',
+  setRole: r => Token.setRole(r),
   canExportPhone: () => Perm.role() === 'super_admin',
   canManageAdmins: () => Perm.role() === 'super_admin',
-  canInterpret: () => Perm.role() === 'super_admin'   // 待 D 确认是否放开给 operator
+  // AI 解读当前服务端两角色均可用；待组内确认后与文档/服务端/界面同步
+  canInterpret: () => Perm.role() === 'super_admin' || Perm.role() === 'operator'
 };
 
 /* ---------- 图片 URL：后端存相对地址，展示时拼 baseURL ---------- */
