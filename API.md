@@ -1,7 +1,7 @@
-# 「摩托销售管理系统」接口契约 v1.5
+# 「摩托销售管理系统」接口契约 v1.6
 
-> 定稿日期：2026.11.25；v1.5 更新：11.29 对照 D 最新提交 `a218dd3` 与 main 分支小程序（`b2fc86b`）实际调用复核。**接口切换方案已拍板：C 端首页/收藏/客服/筛选按小程序（A）现有调用形状定稿，秦旭实现时照做，A 无需改代码**；同时修正活动管理返回结构、分析字段名（moduleLabel/sessions）、埋点说明。
-> v1.4 更新：11.29 对照 D 远端提交 `264b515` 逐行核实，修正错误码全表、登录/活动/分析的返回结构、补齐隐藏接口（发布/下架/取消报名/用户详情/管理员编辑/埋点），确认时间为 ISO 8601、数据库为 SQLite。
+> 定稿日期：2026.11.25；v1.6 更新：11.29 按小程序 README 与页面实际取值修正：车型筛选参数补齐 `cc/tier/tags/sort` 且 `minPrice/maxPrice` 单位为**元**（响应 price 仍为分）；车型详情改为页面实际结构（顶层 `power/torque/weight/seatHeight/tank/desc`、`images` 与 `tags` 为字符串数组、收藏标记 `favorited`）；收藏列表复用车型简要（含 `id`/`cc`）；首页聚合明确 `banner.link` 与 `news.summary`。
+> v1.5 更新：11.29 对照 D `a218dd3` 与 main 小程序复核，C 端首页/收藏/客服/筛选按小程序现状定稿，A 无需改代码。
 > 此后任何改动必须先改本文档，再改代码，口头约定一律无效。
 > 责任人（对应四人分工表）：
 > 任务1 = 组长兼小程序前端（李端）
@@ -96,7 +96,7 @@
 - 响应信封字段**固定为 `code / message / data`**，前端不得读 `msg`
 - **接口 JSON 字段一律驼峰**（`startAt`、`signupStartAt`、`avatarUrl`），数据库列才是下划线（`start_at`）——前端不要照搬建表字段名
 - 车型分类字段统一为 `category`（旧名 `series` 作废）；车型详情的收藏标记为 `favorited`（旧名 `isFavorited` 作废）
-- 价格字段固定为 `price`，单位**分**，前端展示时除以 100
+- 价格字段固定为 `price`，**响应单位为分**，前端展示时除以 100；**车型列表查询参数 `minPrice`/`maxPrice` 单位为元**（与小程序一致，含边界，`0` 为有效值，不传或空串表示不限）
 - 客服接口请求**固定为 `messages` 数组**（多轮上下文），兼容单条 `question`；响应固定含 `reply`（与 `answer` 同值）
 - 接口路径以本文档为唯一标准，已有代码路径不一致的一方改代码
 
@@ -133,10 +133,10 @@
 
 | 表 | 关键字段 | 设计要点 |
 |---|---|---|
-| banner | id, title, image, link_type, link_url, sort, status, created_at | status 控制上下架；sort 排序 |
-| news | id, title, content, cover, date, status, sort, created_at | 新车资讯 |
-| bike | id, name, category, cc(排量), tags(JSON), price(分), params(JSON), cover, status, sort, created_at | name/category 建索引 |
-| bike_image | id, bike_id, url, type(1主图/2细节), sort, created_at | 一车多图；bike_id 建索引 |
+| banner | id, title, image, link_type, link_url, sort, status, created_at | status 控制上下架；sort 排序；C 端返回时拼成 `link`（格式 `/bike/:id`、`/activity/:id`，为空表示不跳转） |
+| news | id, title, summary, content, cover, date, status, sort, created_at | summary 用于首页/列表摘要展示，content 用于详情 |
+| bike | id, name, category, cc(排量), tier, tags(JSON数组文本), price(分), specs(JSON文本：power/torque/weight/seatHeight/tank), desc, cover, status, sort, created_at | name/category 建索引；**数据库可存 JSON 文本，接口返回时展开为页面结构**（tier 由 cc 计算：entry ≤250 / mid 300–499 / big ≥500） |
+| bike_image | id, bike_id, url, type(1主图/2细节), sort, created_at | 一车多图；bike_id 建索引；type/sort 仅内部排序用，**C 端一律返回 url 字符串数组** |
 | favorite | id, user_id(引用 c_user.id), bike_id, created_at | (user_id,bike_id) 唯一；取消收藏物理删除；收藏接口幂等（重复操作返回成功） |
 | chat_log | id, user_id(引用 c_user.id), session_id, question, answer, created_at | 按 session_id 归组 |
 
@@ -172,35 +172,45 @@ schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一
 
 | 接口 | 方法+路径 | 请求参数 | data 返回 | 错误码 |
 |---|---|---|---|---|
-| **首页聚合** | GET /api/home | — | {banners:[banner对象], news:[资讯对象], hotBikes:[车型简要]}——**一次请求拿齐首页三个区块**（与小程序 getHome 对齐） | — |
-| C 端 Banner 列表 | GET /api/banners | — | list:[{id, title, image, linkType, linkUrl}]（只返回 status=1，按 sort 升序） | — |
-| Banner 列表（管理） | GET /api/admin/banners | page/pageSize | total+list | 403 |
+| **首页聚合** | GET /api/home | — | {**banners**:[{id, title, image, **link**, sort}]（link 由 link_type/link_url 拼成，格式 `/bike/:id`、`/activity/:id`，为空表示不跳转）, **news**:[{id, title, **summary**, date}], **hotBikes**:[车型简要]}——**一次请求拿齐首页三个区块** | — |
+| C 端 Banner 列表 | GET /api/banners | — | list:[{id, title, image, link, sort}]（只返回 status=1，按 sort 升序；**C 端一律返回拼好的 link**） | — |
+| Banner 列表（管理） | GET /api/admin/banners | page/pageSize | total+list:[{id, title, image, linkType, linkUrl, sort, status}]（管理端返回原始 linkType/linkUrl） | 403 |
 | 新增 Banner（管理） | POST /api/admin/banners | {title, image, linkType, linkUrl?, sort?, status?}（title/image 必填） | {id} | 400 |
 | 编辑（管理） | PUT /api/admin/banners/:id | 同上字段（未改可不传） | — | 404/400 |
 | 删除（管理） | DELETE /api/admin/banners/:id | — | — | 404 |
-| C 端资讯列表 | GET /api/news | page/pageSize | total+list:[{id, title, cover, content, date}]（只返回 status=1） | — |
+| C 端资讯列表 | GET /api/news | page/pageSize | total+list:[{id, title, summary, cover, date}]（只返回 status=1） | — |
+| C 端资讯详情 | GET /api/news/:id | — | {id, title, summary, content, cover, date} | 404 |
 | 资讯列表（管理） | GET /api/admin/news | page/pageSize | total+list | 403 |
-| 新增资讯（管理） | POST /api/admin/news | {title, content, cover?, sort?, status?} | {id} | 400 |
+| 新增资讯（管理） | POST /api/admin/news | {title, summary, content, cover?, sort?, status?} | {id} | 400 |
 | 编辑（管理） | PUT /api/admin/news/:id | 同上字段 | — | 404/400 |
 | 删除（管理） | DELETE /api/admin/news/:id | — | — | 404 |
 
-**车型简要（brief）**&#8203;：{id, name, category, cc, price, cover, tags}——首页 hotBikes 用此结构。
+**车型简要（brief）**&#8203;：{id, name, category, cc, price, cover, tags:[字符串数组]}——首页 hotBikes、车型列表、收藏列表、客服 bikes 均用此结构（tags 数据库存 JSON 文本，返回时转数组）。
 
 ### 模块 3：车型【任务3（秦旭）实现，按本契约】
 
 | 接口 | 方法+路径 | 请求参数 | data 返回 | 错误码 |
 |---|---|---|---|---|
-| C 端车型列表 | GET /api/bikes | page/pageSize/keyword/category/minPrice/maxPrice（分） | total+list:[{id, name, category, cc, price, cover, tags}]（只返回 status=1） | — |
+| C 端车型列表 | GET /api/bikes | page/pageSize/keyword/**cc/minPrice/maxPrice/sort/category/tier/tags**（参数规则见下） | total+list:[车型简要]（只返回 status=1） | — |
 | 筛选项 | GET /api/bikes/filters | — | {categories:[...], tags:[...]}（从在架车型汇总去重，**必须注册在 /api/bikes/:id 路由之前**） | — |
 | 热门车型 | GET /api/bikes/hot | limit（默认 4） | list:[车型简要] | — |
-| C 端车型详情 | GET /api/bikes/:id | — | {id, name, category, cc, tags, price, params, cover, favorited, images:[{url, type}]}（**收藏标记字段为 favorited**；未登录返回 false） | 404 |
+| C 端车型详情 | GET /api/bikes/:id | — | 车型简要 + {**power, torque, weight, seatHeight, tank, images:[字符串数组], desc, favorited**}（规格为顶层字段，非 JSON；未登录 favorited 返回 false） | 404 |
 | 车型列表（管理） | GET /api/admin/bikes | page/pageSize/keyword/category | total+list | 403 |
-| 新增车型（管理） | POST /api/admin/bikes | {name, category, cc?, tags?, price, params?, cover?, status?, sort?, images?:[{url, type, sort?}]} | {id} | 400 |
+| 新增车型（管理） | POST /api/admin/bikes | {name, category, cc, tags?, price, power?, torque?, weight?, seatHeight?, tank?, desc?, cover?, status?, sort?, images?:[url 字符串数组]} | {id} | 400 |
 | 编辑车型（管理） | PUT /api/admin/bikes/:id | 同上字段（images 传则整体替换图集） | — | 404/400 |
 | 删除车型（管理） | DELETE /api/admin/bikes/:id | — | — | 404 |
 | 图片上传 | POST /api/upload | form-data: file | {url}（相对地址，前端拼 baseURL） | 400 |
 
-约定：`price` 整型分；`params` 为 JSON 字符串（前端原样展示）；`tags` 为 JSON 数组字符串；`images[].type`：1=主图，2=细节图。价格区间筛选（minPrice/maxPrice）小程序已实现，后端必须支持。
+`/api/bikes` 筛选参数规则（与小程序筛选面板逐条对齐）：
+
+- **价格**：`minPrice` / `maxPrice` 单位**元**、含边界，可只传一个；`0` 是有效值不表示不限；不传或空串表示不限；区间不合法（min>max 或负数）返回 400。响应里 `price` 仍是**分**
+- **排序**：`sort` 取 `price_asc` / `price_desc`，不传为默认排序；价格相同时按 id 升序，保证分页稳定
+- **类别**：`category` 为类别原文（如 `巡航`），单选
+- **档位**：`tier` 取 `entry`（≤250cc）/ `mid`（300–499cc）/ `big`（≥500cc）；可与 `cc` 同时传，取交集
+- **标签**：`tags` 逗号分隔（如 `tags=新手友好,大座高`），车型须**同时包含全部标签**
+- `cc`：按排量精确值筛选（150/250/300/400/500 等，0/不传表示全部）
+
+数据库存储：`tags`/规格可存 JSON 文本，**接口返回时展开**为上述页面结构。
 使用方：小程序摩托模块 → 任务1（李端）；车型管理页 → 任务2（杨乐曈）。
 
 ### 模块 4：收藏【任务3（秦旭）实现，按本契约】
@@ -209,7 +219,7 @@ schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一
 |---|---|---|---|---|
 | 收藏/取消（切换式） | POST /api/bikes/:id/favorite | —（收藏） | {favorited:true} | 401/404 |
 | 取消收藏 | DELETE /api/bikes/:id/favorite | —（取消） | {favorited:false} | 401/404 |
-| 我的收藏列表 | GET /api/favorites | page/pageSize | total+list:[{bikeId, name, category, price, cover}] | 401 |
+| 我的收藏列表 | GET /api/favorites | page/pageSize | total+list:[**车型简要**{id, name, category, cc, price, cover, tags}]（**必须含 id 和 cc**，卡片跳转与排量档位显示依赖这两项） | 401 |
 
 约定：**两个接口都幂等**——重复收藏、重复取消都返回成功（与小程序 mock 行为一致）；重复收藏不再使用 1015（保留给未来强校验场景）。详情页收藏回显读 `favorited` 字段。
 使用方：小程序收藏交互与我的收藏 → 任务1（李端）。
@@ -242,7 +252,7 @@ schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一
 
 | 接口 | 方法+路径 | 请求参数 | data 返回 | 错误码 |
 |---|---|---|---|---|
-| 多轮对话 | POST /api/chat | {sessionId?（前端本地生成，如 `Date.now()-随机串`）, **messages:[{role:"user"/"assistant", content}]**（多轮上下文，不含欢迎语和占位消息；兼容单条 {question} 写法） | {**answer**, **reply**（=answer 的别名，前端读这个）, sessionId, **bikes**:[车型简要]（答案关联的在架车型卡片，可为空数组）} | 400 |
+| 多轮对话 | POST /api/chat | {sessionId?（前端本地生成，如 `Date.now()-随机串`）, **messages:[{role:"user"/"assistant", content}]**（多轮上下文，最近 20 条，不含欢迎语和占位消息；兼容单条 {question} 写法） | {**reply**（前端读这个，与 answer 同值）, answer, sessionId, **bikes**:[{id, name, price, ...车型简要}]（答案关联的在架车型卡片，可为空数组）} | 400 |
 
 约定：答案锚定库内车型数据（系统提示词注入在架车型 name/category/cc/price），库外问题固定回复"暂无相关车型信息，您可以浏览车型列表"且 bikes 为空数组；问答写入 chat_log（user_id 引用 c_user.id，question 存最后一条用户消息、answer 存回复）。使用方：小程序客服页 → 任务1（李端）。
 
@@ -300,6 +310,7 @@ schema.sql 由任务3（秦旭）把上面两部分合成**一份可对空库一
 | 模块 2/3/4/6（任务3 未实现） | 已按小程序现有调用形状定稿（/api/home、切换式收藏、messages/reply） | 秦旭按文档实现，联调时逐个接口验证 |
 | 车型字段 series→category | 全文统一 category，series 作废 | 杨乐曈后台管理页按 category 开发 |
 | 收藏幂等 | 重复收藏/取消都返回成功，不再用 1015 | 杨乐曈注意错误码表 1015 标注已预留 |
+| 价格单位 | 查询参数 minPrice/maxPrice 为**元**，响应 price 为**分** | 秦旭实现时注意换算；杨乐曈后台录入价格用分 |
 | AI 解读放开 | 仅 super_admin | D 确认 operator 是否放开 |
 | 上传图片目录 | `/uploads/年/月/xxx.jpg` | 秦旭实现时与 D 的静态目录（server/public）对齐 |
 | 漏斗验证 | 埋点已接，联调日用真实请求验证出数 | 李端/杨乐曈联调时确认分析页有数 |
