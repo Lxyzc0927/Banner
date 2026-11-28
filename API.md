@@ -1,4 +1,6 @@
-# 「摩托销售管理系统」接口契约 v1.7
+# 「摩托销售管理系统」接口契约 v2.0
+
+> v2.0 更新（2026.11.28）。小程序统一排量牌输入类型并按页面声明自定义组件，`GET /api/meta` 的 `data.version` 与项目版本 `2.0.0` 同步。
 
 > 定稿日期：2026.11.25；v1.7 更新：2026.11.28。明确 Banner 与车型的上传及编辑规则，后台发布／下架依据活动原始状态，取消报名按报名记录和活动结束时间判断。
 > v1.6 更新：11.28 按小程序 README 与页面实际取值修正：车型筛选参数补齐 `cc/tier/tags/sort` 且 `minPrice/maxPrice` 单位为**元**（响应 price 仍为分）；车型详情改为页面实际结构（顶层 `power/torque/weight/seatHeight/tank/desc`、`images` 与 `tags` 为字符串数组、收藏标记 `favorited`）；收藏列表复用车型简要（含 `id`/`cc`）；首页聚合明确 `banner.link` 与 `news.summary`。

@@ -1,4 +1,8 @@
 {
   "navigationBarTitleText": "XX 摩托",
-  "enablePullDownRefresh": true
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "bike-card": "/components/bike-card/index",
+    "empty": "/components/empty/index"
+  }
 }

@@ -6,10 +6,11 @@ Component({
   properties: {
     bike: { type: Object, value: {} }
   },
-  data: { priceText: '', tierLabel: '' },
+  data: { priceText: '', tierLabel: '', plateCc: 0 },
   observers: {
     bike(b) {
-      this.setData({ priceText: format.priceFromFen(b && b.price), tierLabel: format.tier(b && b.cc).label })
+      const plateCc = format.displacement(b && b.cc)
+      this.setData({ priceText: format.priceFromFen(b && b.price), tierLabel: format.tier(plateCc).label, plateCc })
     }
   },
   methods: {

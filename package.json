@@ -1,6 +1,6 @@
 {
   "name": "moto-sales-platform",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "description": "XX 摩托销售管理系统 - 登录、用户、活动与用户行为分析模块（生产实习）",
   "scripts": {

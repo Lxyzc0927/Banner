@@ -52,11 +52,6 @@
       }
     ]
   },
-  "usingComponents": {
-    "bike-card": "/components/bike-card/index",
-    "empty": "/components/empty/index",
-    "plate": "/components/plate/index"
-  },
   "style": "v2",
   "sitemapLocation": "sitemap.json",
   "lazyCodeLoading": "requiredComponents"

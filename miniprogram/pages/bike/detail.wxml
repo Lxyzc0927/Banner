@@ -14,7 +14,7 @@
   </swiper>
 
   <view class="wrap head">
-    <plate cc="{{bike.cc}}" size="l" unit />
+    <plate cc="{{plateCc || 0}}" size="l" unit />
     <view class="name">{{bike.name}}</view>
     <view class="price-row">
       <view class="price"><text class="yen">¥</text><text class="num">{{priceText}}</text></view>

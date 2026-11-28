@@ -16,6 +16,11 @@ function percent(part, total) {
   return Math.min(100, Math.round(part / total * 100))
 }
 
+function displacement(value) {
+  const cc = typeof value === 'number' || typeof value === 'string' ? Number(value) : 0
+  return Number.isFinite(cc) && cc > 0 ? cc : 0
+}
+
 // 号码牌档位：150/250 白牌（入门），300/400 黄牌（中排），500 及以上红牌（大排）
 // key 与接口参数 tier 一致：entry ≤250cc，mid 300–499cc，big ≥500cc
 const TIERS = [
@@ -52,4 +57,4 @@ function dateParts(text) {
   return { month: Number(m[1]), day: m[2], time: m[3] || '' }
 }
 
-module.exports = { price, priceFromFen, percent, tier, tierByKey, TIERS, ccOfName, dateTime, dateParts }
+module.exports = { price, priceFromFen, percent, displacement, tier, tierByKey, TIERS, ccOfName, dateTime, dateParts }

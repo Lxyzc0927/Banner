@@ -1,3 +1,6 @@
 {
-  "navigationBarTitleText": "智能客服"
+  "navigationBarTitleText": "智能客服",
+  "usingComponents": {
+    "plate": "/components/plate/index"
+  }
 }
