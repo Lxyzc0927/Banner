@@ -1,7 +1,7 @@
 /*
  * 接口清单：路径与参数见 miniprogram/README.md。
  * 登录、手机号、活动、报名按 D 模块（origin/feature/lumenh26）实际接口；
- * 车型、首页、收藏、智能客服、埋点等接口尚待后端提供，暂只有 mock 实现。
+ * 首页、车型和收藏支持真实后端；智能客服当前用 mock 演示。
  * 分页参数统一为 page / pageSize，返回 { list, total, page, pageSize }。
  */
 const request = require('../utils/request')
@@ -32,6 +32,7 @@ module.exports = {
   getActivity: (id, opts) => request(Object.assign({ url: `/api/activities/${id}` }, opts)),
   // data：{ remark }（选填）；返回 { signup, activity }
   signup: (id, data) => request({ url: `/api/activities/${id}/signup`, method: 'POST', data, loading: '提交中' }),
+  cancelSignup: id => request({ url: `/api/activities/${id}/signup`, method: 'DELETE', loading: '取消中' }),
   getMySignups: params => request({ url: '/api/users/me/signups', data: params }),
 
   // 智能客服（大模型响应慢，单独放宽超时）

@@ -11,6 +11,7 @@ const http = require('node:http');
 const { once } = require('node:events');
 const { spawnSync } = require('node:child_process');
 const { mkdtempSync, readFileSync, rmSync } = require('node:fs');
+const { createRequire } = require('node:module');
 const vm = require('node:vm');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
@@ -545,6 +546,20 @@ describe('报名：防重、名额、时间窗、手机号与取消', () => {
     assert.equal(again.body.code, 0);
   });
 
+  test('下架后仍可取消有效报名，结束后的活动无法取消', async () => {
+    const activity = insertActivity({ title: '取消报名状态验证' });
+    const route = `/api/activities/${activity}/signup`;
+    const options = { token: users[0] };
+    assert.equal((await api(route, { ...options, method: 'POST' })).body.code, 0);
+    db.prepare("UPDATE activity SET status = 'offline' WHERE id = ?").run(activity);
+    assert.equal((await api(route, { ...options, method: 'DELETE' })).body.code, 0);
+    assert.equal((await api(route, { ...options, method: 'DELETE' })).status, 404);
+    db.prepare("UPDATE activity SET status = 'published' WHERE id = ?").run(activity);
+    assert.equal((await api(route, { ...options, method: 'POST' })).body.code, 0);
+    db.prepare('UPDATE activity SET start_at = ?, end_at = ? WHERE id = ?').run(iso(-7200000), iso(-3600000), activity);
+    assert.equal((await api(route, { ...options, method: 'DELETE' })).body.code, 1002);
+  });
+
   test('并发报名不会超卖：quota=1 时 10 个请求只有 1 个成功', async () => {
     const activity = insertActivity({ title: '并发报名测试', quota: 1 });
     const tokens = [];
@@ -907,7 +922,127 @@ function runFrontend(file, context, transform = source => source) {
   vm.runInContext(transform(source), context, { filename });
 }
 
+function loadPage(file, context) {
+  let page;
+  const filename = path.resolve(__dirname, '../..', file);
+  runFrontend(file, vm.createContext({
+    ...context,
+    require: context.require || createRequire(filename),
+    Page: value => { page = value; },
+  }));
+  page.setData = function (data) { Object.assign(this.data, data); };
+  return page;
+}
+
 describe('v1.7 联调回归', () => {
+  test('小程序从我的报名取消下架活动，并在详情页重载后反映取消结果', async () => {
+    const activityId = insertActivity({ title: '小程序取消报名复验' });
+    const login = await loginUserWithPhone('mock:cancel-ui', '13777777721');
+    const token = login.body.data.token;
+    const detailPath = '/api/activities/' + activityId;
+    const signupPath = detailPath + '/signup';
+    const request = async (url, method) => {
+      const { body } = await api(url, { method, token });
+      if (body.code !== 0) throw Object.assign(new Error(body.message), { code: body.code });
+      return body.data;
+    };
+    const signup = (await request(signupPath, 'POST')).signup;
+    assert.equal((await request(detailPath)).signedUp, true);
+
+    const events = [];
+    const navigation = [];
+    let confirm = false;
+    const file = 'miniprogram/pages/mine/signups.js';
+    const localRequire = createRequire(path.resolve(__dirname, '../..', file));
+    const page = loadPage(file, {
+      wx: {
+        showModal: options => options.success({ confirm }),
+        showToast: options => events.push(options.title),
+        navigateTo: options => navigation.push(options.url),
+      },
+      require: name => name === '../../api/index' ? {
+        getMySignups: () => request('/api/users/me/signups'),
+        cancelSignup: id => { events.push(id); return request('/api/activities/' + id + '/signup', 'DELETE'); },
+      } : localRequire(name),
+    });
+    db.prepare("UPDATE activity SET status = 'offline' WHERE id = ?").run(activityId);
+    assert.equal((await api(detailPath, { token })).status, 404);
+    await page.refresh();
+    const offlineSignup = page.data.list.find(item => item.id === signup.id);
+    assert.equal(offlineSignup.activity.status, 'offline');
+    assert.equal(offlineSignup.canCancel, true);
+    const tap = { currentTarget: { dataset: { id: signup.id } } };
+    page.open(tap);
+    assert.deepEqual(navigation, []);
+    await page.cancelSignup(tap);
+    assert.deepEqual(events, []);
+    confirm = true;
+    await Promise.all([page.cancelSignup(tap), page.cancelSignup(tap)]);
+    assert.deepEqual(events, [activityId, '报名已取消']);
+    const cancelled = page.data.list.find(item => item.id === signup.id);
+    assert.equal(cancelled.stateText, '已取消');
+    assert.equal(cancelled.canCancel, false);
+
+    db.prepare("UPDATE activity SET status = 'published' WHERE id = ?").run(activityId);
+    const detailFile = 'miniprogram/pages/activity/detail.js';
+    const detailRequire = createRequire(path.resolve(__dirname, '../..', detailFile));
+    const detail = loadPage(detailFile, {
+      require: name => name === '../../api/index' ? { getActivity: () => request(detailPath) }
+        : name === '../../utils/track' ? () => {} : detailRequire(name),
+    });
+    detail.onLoad({ id: activityId });
+    await detail.onShow();
+    assert.equal(detail.data.activity.signedUp, false);
+    assert.equal(detail.data.activity.mySignup, null);
+    assert.equal(detail.data.button.text, '立即报名');
+    await page.refresh();
+    page.open(tap);
+    assert.deepEqual(navigation, ['/pages/activity/detail?id=' + activityId]);
+
+    const nextSignup = (await request(signupPath, 'POST')).signup;
+    await detail.onShow();
+    assert.equal(detail.data.activity.signedUp, true);
+    db.prepare('UPDATE activity SET start_at = ?, end_at = ? WHERE id = ?').run(iso(-7200000), iso(-3600000), activityId);
+    await page.refresh();
+    assert.equal(page.data.list.find(item => item.id === nextSignup.id).canCancel, false);
+    await page.cancelSignup({ currentTarget: { dataset: { id: nextSignup.id } } });
+    assert.equal(events.length, 2);
+  });
+
+  test('小程序 Mock 支持取消下架活动，且保留已取消记录', async () => {
+    const file = 'miniprogram/mock/index.js';
+    const localRequire = createRequire(path.resolve(__dirname, '../..', file));
+    const source = localRequire('./data');
+    const activity = { ...source.activities[0], status: 'offline', endAt: iso(3600000) };
+    let store = {
+      user: {}, favorites: [], seq: 2,
+      signups: [{ id: 1, signupNo: 'S1', activityId: activity.id, status: 'confirmed', createdAt: iso(0) }],
+    };
+    const context = vm.createContext({
+      module: { exports: {} },
+      require: name => name === './data' ? { ...source, activities: [activity] } : localRequire(name),
+      setTimeout: callback => callback(),
+      wx: { getStorageSync: () => store, setStorageSync: (key, value) => { store = value; } },
+    });
+    runFrontend(file, context);
+    const { handle } = context.module.exports;
+    const route = '/api/activities/' + activity.id + '/signup';
+    assert.equal((await handle('DELETE', route, {}, 'mock-token')).data.data.signup.status, 'cancelled');
+    const mine = await handle('GET', '/api/users/me/signups', {}, 'mock-token');
+    assert.equal(mine.data.data.list[0].status, 'cancelled');
+    assert.equal(mine.data.data.list[0].activity.status, 'offline');
+    assert.equal((await handle('DELETE', route, {}, 'mock-token')).data.code, 404);
+  });
+
+  test('客服 Mock 按元筛预算并返回分值车型', () => {
+    const source = require('../../miniprogram/mock/data');
+    const { reply } = require('../../miniprogram/mock/chat');
+    const result = reply([{ role: 'user', content: '预算 3 万推荐车型' }], source.bikes, source.activities);
+    assert.match(result.reply, /预算 30,000 元以内/);
+    assert.ok(result.bikes.length > 0);
+    assert.ok(result.bikes.every(bike => bike.price <= 3_000_000));
+  });
+
   test('后台 Banner 表单允许留空创建和修改 sort=0 的标题', async () => {
     const fields = {
       '#f-title': { value: '默认排序' }, '#f-sort': { value: '' }, '#f-link': { value: '' },

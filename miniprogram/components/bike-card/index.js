@@ -9,7 +9,7 @@ Component({
   data: { priceText: '', tierLabel: '' },
   observers: {
     bike(b) {
-      this.setData({ priceText: format.price(b && b.price), tierLabel: format.tier(b && b.cc).label })
+      this.setData({ priceText: format.priceFromFen(b && b.price), tierLabel: format.tier(b && b.cc).label })
     }
   },
   methods: {

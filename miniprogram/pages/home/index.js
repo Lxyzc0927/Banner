@@ -25,7 +25,7 @@ function plateOf(link) {
   }
   return api.getBike(id, { silent: true }).then(b => ({
     // 车型 Banner 跟排量档位走：150/250 白牌、300/400 黄牌、500 红牌
-    big: String(b.cc), unit: 'cc', line: `${b.name}，¥${format.price(b.price)} 起`, color: format.tier(b.cc).color
+    big: String(b.cc), unit: 'cc', line: `${b.name}，¥${format.priceFromFen(b.price)} 起`, color: format.tier(b.cc).color
   }), () => null)
 }
 
