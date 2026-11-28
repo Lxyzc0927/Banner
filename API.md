@@ -1,6 +1,7 @@
-# 「摩托销售管理系统」接口契约 v1.6
+# 「摩托销售管理系统」接口契约 v1.7
 
-> 定稿日期：2026.11.25；v1.6 更新：11.29 按小程序 README 与页面实际取值修正：车型筛选参数补齐 `cc/tier/tags/sort` 且 `minPrice/maxPrice` 单位为**元**（响应 price 仍为分）；车型详情改为页面实际结构（顶层 `power/torque/weight/seatHeight/tank/desc`、`images` 与 `tags` 为字符串数组、收藏标记 `favorited`）；收藏列表复用车型简要（含 `id`/`cc`）；首页聚合明确 `banner.link` 与 `news.summary`。
+> 定稿日期：2026.11.25；v1.7 更新：12.01 按组长审查补充两条使用规则：①创建/更新 Banner、车型前必须先调 `POST /api/upload` 上传图片、把返回 url 填进请求体（必填字段不得缺省）；②活动的发布/下架等按钮动作以原始 `status` 判断，`phase` 仅用于展示文案计算。
+> v1.6 更新：11.29 按小程序 README 与页面实际取值修正：车型筛选参数补齐 `cc/tier/tags/sort` 且 `minPrice/maxPrice` 单位为**元**（响应 price 仍为分）；车型详情改为页面实际结构（顶层 `power/torque/weight/seatHeight/tank/desc`、`images` 与 `tags` 为字符串数组、收藏标记 `favorited`）；收藏列表复用车型简要（含 `id`/`cc`）；首页聚合明确 `banner.link` 与 `news.summary`。
 > v1.5 更新：11.29 对照 D `a218dd3` 与 main 小程序复核，C 端首页/收藏/客服/筛选按小程序现状定稿，A 无需改代码。
 > 此后任何改动必须先改本文档，再改代码，口头约定一律无效。
 > 责任人（对应四人分工表）：
@@ -109,9 +110,9 @@
 
 - **内容模块**（banner / news / bike，任务3 实现）：status 用数字 `1 = 上架`，`0 = 下架`；sort 数字越小越靠前
 - **用户状态**：`active` / `disabled` 字符串；禁用/启用走 `PATCH` 并附 `reason`（禁用必填）；被禁用用户登录返回 1008
-- **活动模块**：status 枚举 `draft（草稿）/ published（已发布）/ offline（已下架）`；返回还带 `statusLabel`（中文）与 `phase`（`draft/offline/upcoming/ongoing/ended`，前端直接用 phase 判断"进行中/已结束"）、`signupOpen`（当前能否报名）、`remaining`（剩余名额）
+- **活动模块**：status 枚举 `draft（草稿）/ published（已发布）/ offline（已下架）`；返回还带 `statusLabel`（中文）与 `phase`（`draft/offline/upcoming/ongoing/ended`，前端直接用 phase 判断"进行中/已结束"）、`signupOpen`（当前能否报名）、`remaining`（剩余名额）；**按钮类操作（发布/下架/取消报名）一律按原始 `status` 判断动作，`phase` 只用于展示文案计算**——已发布未开始的活动按钮不再显示"发布"，避免重复操作被后端以 1009 拒绝
 - **报名状态**：`confirmed（已报名）/ cancelled（已取消）`；取消后名额释放、可重新报名
-- **图片存储**：数据库存相对 URL（如 `/uploads/2026/11/xxx.jpg`），**小程序统一转换接口返回的相对图片路径（拼 baseURL）展示，并保留绝对 URL 直接使用**
+- **图片存储**：数据库存相对 URL（如 `/uploads/2026/11/xxx.jpg`），**小程序统一转换接口返回的相对图片路径（拼 baseURL）展示，并保留绝对 URL 直接使用**；**创建/更新 Banner、车型前必须先调 `POST /api/upload` 上传图片、把返回的 url 填进创建/更新请求体**（image/cover 为必填或业务必需字段，不得只在页面做本地预览就提交，否则后端以参数错误 400 拒绝）
 - **上传限制**（任务3 实现）：仅 jpg / png / webp，单张 ≤ 5MB，超限返回 400
 
 ## 二、数据表（数据库为 SQLite；每表必有主键 id 与 created_at）
