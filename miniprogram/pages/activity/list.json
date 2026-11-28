@@ -1,4 +1,7 @@
 {
   "navigationBarTitleText": "活动",
-  "enablePullDownRefresh": true
+  "enablePullDownRefresh": true,
+  "usingComponents": {
+    "empty": "/components/empty/index"
+  }
 }
