@@ -33,8 +33,9 @@ Page({
 
   load() {
     return api.getBike(this.id).then(bike => {
+      if (!bike.images.length && bike.cover) bike = Object.assign({}, bike, { images: [bike.cover] })
       wx.setNavigationBarTitle({ title: bike.name })
-      this.setData({ bike, priceText: format.price(bike.price), params: paramsOf(bike), tierLabel: format.tier(bike.cc).label, tierKey: format.tier(bike.cc).key, tierColor: format.tier(bike.cc).color, error: '' })
+      this.setData({ bike, priceText: format.priceFromFen(bike.price), params: paramsOf(bike), tierLabel: format.tier(bike.cc).label, tierKey: format.tier(bike.cc).key, tierColor: format.tier(bike.cc).color, error: '' })
     }, err => {
       this.setData({ error: err.message || '加载失败' })
     })

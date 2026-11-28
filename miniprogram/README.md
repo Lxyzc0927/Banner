@@ -131,7 +131,7 @@ flowchart LR
 `/api/bikes` 的参数：
 
 - 返回字段：车型简要 `{ id, name, category, cc, price, cover, tags }`。
-- 价格：
+- 价格：接口和 mock 的响应 `price` 统一以分表示，展示时转为元。筛选条件以元提交。
   - `minPrice` / `maxPrice` 单位元、含边界，可以只传一个。
   - `0` 是有效值，不表示不限；不传或传空串才表示不限。
   - 区间不合法返回 `code: 400`。

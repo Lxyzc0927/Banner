@@ -3,7 +3,7 @@
  * 真实版本由后端调用大模型实现，返回结构保持一致：{ reply, bikes: [{ id, name, price }] }
  */
 const { CATEGORIES } = require('./data')
-const { dateTime: dateText } = require('../utils/format')
+const { dateTime: dateText, price, priceFromFen } = require('../utils/format')
 
 const RESET_WORDS = /重新|重来|换个|清空/
 const NEWBIE_WORDS = /新手|入门|第一台|女生|练手/
@@ -31,16 +31,15 @@ function findBike(text, bikes) {
 }
 
 function brief(b) { return { id: b.id, name: b.name, price: b.price } }
-function priceText(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ',') }
 
 function describe(b, question) {
-  if (/多少钱|价格|售价|贵/.test(question)) return `${b.name} 厂商指导价 ${priceText(b.price)} 元，到店可咨询当期优惠。`
+  if (/多少钱|价格|售价|贵/.test(question)) return `${b.name} 厂商指导价 ${priceFromFen(b.price)} 元，到店可咨询当期优惠。`
   if (/新手|适合/.test(question)) {
     return b.cc <= 250
       ? `${b.name} 是 ${b.cc}cc ${b.category}，座高 ${b.seatHeight}mm，动力线性，比较适合新手。`
       : `${b.name} 是 ${b.cc}cc ${b.category}，最大功率 ${b.power}kW，动力较强，建议有一定驾驶经验后再选择。`
   }
-  return `${b.name}：${b.category}，${b.cc}cc，最大功率 ${b.power}kW，峰值扭矩 ${b.torque}N·m，整备质量 ${b.weight}kg，座高 ${b.seatHeight}mm，油箱 ${b.tank}L，指导价 ${priceText(b.price)} 元。`
+  return `${b.name}：${b.category}，${b.cc}cc，最大功率 ${b.power}kW，峰值扭矩 ${b.torque}N·m，整备质量 ${b.weight}kg，座高 ${b.seatHeight}mm，油箱 ${b.tank}L，指导价 ${priceFromFen(b.price)} 元。`
 }
 
 function reply(messages, bikes, activities) {
@@ -79,12 +78,12 @@ function reply(messages, bikes, activities) {
   if (!budget && !cc && !category && !newbie) return { reply: HELP, bikes: [] }
 
   let list = bikes.filter(b =>
-    (!budget || b.price <= budget) &&
+    (!budget || b.price <= budget * 100) &&
     (!cc || b.cc === cc) &&
     (!category || b.category === category) &&
     (!newbie || b.cc <= 250))
   const conds = [
-    budget && `预算 ${priceText(budget)} 元以内`,
+    budget && `预算 ${price(budget)} 元以内`,
     cc && `${cc}cc`,
     category,
     newbie && '适合新手'

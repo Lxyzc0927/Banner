@@ -6,7 +6,7 @@
       <view class="skeleton sk-row" wx:for="{{[1, 2, 3]}}" wx:key="*this"></view>
     </view>
 
-    <view wx:for="{{list}}" wx:key="id" class="row {{item.dim ? 'ended' : ''}}" hover-class="pressed" data-id="{{item.activityId}}" bindtap="open">
+    <view wx:for="{{list}}" wx:key="id" class="row {{item.dim ? 'ended' : ''}}" hover-class="{{item.activityUnavailable ? 'none' : 'pressed'}}" data-id="{{item.id}}" bindtap="open">
       <view class="plate date {{item.dim ? 'plate-white' : 'plate-yellow'}}">
         <text class="day">{{item.day}}</text>
         <text class="month">{{item.month}}月</text>
@@ -18,7 +18,10 @@
         </view>
         <view class="meta"><text class="num">{{item.time}}</text><text class="place">{{item.location}}</text></view>
         <view class="meta">报名编号 <text class="num">{{item.signupNo}}</text><text class="num phone">{{item.phone}}</text></view>
+        <view wx:if="{{item.activityUnavailable}}" class="meta">活动详情暂不可查看</view>
         <view class="meta light">报名于 <text class="num">{{item.createdText}}</text></view>
+        <button wx:if="{{item.canCancel}}" class="btn btn-ghost cancel-signup" data-id="{{item.id}}"
+          disabled="{{cancellingId !== null}}" loading="{{cancellingId === item.id}}" catchtap="cancelSignup">取消报名</button>
       </view>
     </view>
   </view>

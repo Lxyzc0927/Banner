@@ -25,9 +25,10 @@ Page({
 
   onLoad(query) {
     this.id = Number(query.id)
-    this.load().catch(() => {})
     track('view', { module: 'activity_detail', activityId: this.id })
   },
+
+  onShow() { return this.load().catch(() => {}) },
 
   load() {
     const seq = (this._loadSeq || 0) + 1

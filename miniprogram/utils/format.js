@@ -2,6 +2,15 @@ function price(n) {
   return String(n == null ? '' : n).replace(/\B(?=(\d{3})+(?!\d))/g, ',')
 }
 
+// 接口金额以分保存，筛选面板的元值仍使用 price。
+function priceFromFen(value) {
+  if (value == null || value === '') return ''
+  const fen = Number(value)
+  if (!Number.isFinite(fen)) return ''
+  const [yuan, fraction] = (fen / 100).toFixed(2).split('.')
+  return price(yuan) + (fraction === '00' ? '' : '.' + fraction)
+}
+
 function percent(part, total) {
   if (!total) return 0
   return Math.min(100, Math.round(part / total * 100))
@@ -43,4 +52,4 @@ function dateParts(text) {
   return { month: Number(m[1]), day: m[2], time: m[3] || '' }
 }
 
-module.exports = { price, percent, tier, tierByKey, TIERS, ccOfName, dateTime, dateParts }
+module.exports = { price, priceFromFen, percent, tier, tierByKey, TIERS, ccOfName, dateTime, dateParts }

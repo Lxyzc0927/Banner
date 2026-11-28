@@ -21,7 +21,7 @@ const bikes = Array.from({ length: 24 }, (_, i) => {
     name: `XX ${series} ${cc}`,
     category,
     cc,
-    price: Math.round((9800 + cc * 60 + (i % 6) * 2000) / 100) * 100,
+    price: Math.round((9800 + cc * 60 + (i % 6) * 2000) / 100) * 10000,
     power: Math.round(cc * 0.085 * 10) / 10,
     torque: Math.round(cc * 0.09),
     weight: 120 + Math.round(cc / 5) + (category === '越野' ? -15 : category === '巡航' ? 30 : 0),

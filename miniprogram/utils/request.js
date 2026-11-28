@@ -22,12 +22,14 @@ function cleanParams(data) {
   return out
 }
 
+function baseUrl() { return config.BASE_URL.replace(/\/+$/, '') }
+
 function send({ url, method, data, timeout }) {
   const token = session.getToken()
   if (config.USE_MOCK) return mock.handle(method, url, data, token)
   return new Promise((resolve, reject) => {
     wx.request({
-      url: config.BASE_URL + url,
+      url: baseUrl() + url,
       method,
       data,
       timeout: timeout || config.TIMEOUT,
@@ -50,6 +52,18 @@ function fail(res, body, fallback) {
   }
 }
 
+function resolveImages(value, key) {
+  if (Array.isArray(value)) return value.map(item => resolveImages(item, key))
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([field, item]) => [field, resolveImages(item, field)]))
+  }
+  if ((key === 'cover' || key === 'image' || key === 'images' || key === 'avatarUrl') &&
+      typeof value === 'string' && /^\/(uploads|admin\/assets)\//.test(value)) {
+    return baseUrl() + value
+  }
+  return value
+}
+
 function parse(res, opts, revision) {
   const body = (res.data && typeof res.data === 'object') ? res.data : {}
   // 旧会话的鉴权失败不能清除当前登录态。
@@ -64,7 +78,7 @@ function parse(res, opts, revision) {
   if (body.code === USER_DISABLED && currentSession) session.clear()
   if (res.statusCode < 200 || res.statusCode >= 300) throw fail(res, body, `服务异常（${res.statusCode}）`)
   if (body.code !== config.SUCCESS_CODE) throw fail(res, body, '操作失败')
-  return body.data
+  return config.USE_MOCK ? body.data : resolveImages(body.data)
 }
 
 function request(options) {

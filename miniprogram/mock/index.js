@@ -36,7 +36,7 @@ function paginate(list, q) {
 // 价格参数：未传 / 空串表示不限；数字 0 是有效值，不能当成不限
 function priceParam(v) {
   if (v === undefined || v === null || v === '') return null
-  return Number(v)
+  return Number(v) * 100
 }
 
 function onlineBikes() { return db.bikes.filter(b => b.status === '上架') }
@@ -104,7 +104,7 @@ const routes = [
     const kw = String(q.keyword || '').trim().toLowerCase()
     const min = priceParam(q.minPrice)
     const max = priceParam(q.maxPrice)
-    if ((min != null && isNaN(min)) || (max != null && isNaN(max)) || (min != null && max != null && min > max)) {
+    if ((min != null && (!Number.isFinite(min) || min < 0)) || (max != null && (!Number.isFinite(max) || max < 0)) || (min != null && max != null && min > max)) {
       return fail(400, '价格区间不正确')
     }
     // tags 逗号分隔，车型须包含全部标签
@@ -112,7 +112,7 @@ const routes = [
     const tierOk = b => !q.tier || (q.tier === 'entry' ? b.cc <= 250 : q.tier === 'mid' ? b.cc >= 300 && b.cc < 500 : q.tier === 'big' ? b.cc >= 500 : false)
     const list = onlineBikes().filter(b =>
       (!kw || b.name.toLowerCase().indexOf(kw) > -1 || b.category.toLowerCase().indexOf(kw) > -1) &&
-      (!q.cc || b.cc === Number(q.cc)) &&
+      (!Number(q.cc) || b.cc === Number(q.cc)) &&
       (!q.category || b.category === q.category) &&
       tierOk(b) &&
       tags.every(t => b.tags.indexOf(t) > -1) &&
@@ -196,12 +196,26 @@ const routes = [
       activity: { id: a.id, title: a.title, startAt: a.startAt, endAt: a.endAt, quota: a.quota, signedUp: fresh.signupCount, remaining: fresh.remaining }
     }, 201, '报名成功')
   }],
+  ['DELETE', /^\/api\/activities\/(\d+)\/signup$/, true, (q, p, s) => {
+    const activity = db.activities.find(item => item.id === Number(p[1]))
+    if (!activity) return fail(404, '活动不存在')
+    if (Date.now() > Date.parse(activity.endAt)) return fail(1002, '活动已结束，无法取消报名')
+    const signup = mySignupOf(activity, s)
+    if (!signup) return fail(404, '未找到有效报名记录')
+    signup.status = 'cancelled'
+    signup.cancelledAt = new Date().toISOString()
+    const fresh = activityView(activity, s, true)
+    return ok({
+      signup: { id: signup.id, signupNo: signup.signupNo, status: signup.status, cancelledAt: signup.cancelledAt },
+      activity: { id: activity.id, quota: activity.quota, signedUp: fresh.signupCount, remaining: fresh.remaining }
+    })
+  }],
   ['GET', /^\/api\/(users\/me\/signups|signups\/mine)$/, true, (q, p, s) => {
     const list = s.signups.map(x => {
       const a = db.activities.find(act => act.id === x.activityId)
       return Object.assign(signupView(x), {
         cancelledAt: x.cancelledAt || null,
-        activity: { id: a.id, title: a.title, cover: a.cover || null, location: a.location, startAt: a.startAt, endAt: a.endAt }
+        activity: { id: a.id, title: a.title, cover: a.cover || null, location: a.location, startAt: a.startAt, endAt: a.endAt, status: a.status }
       })
     })
     return ok(paginate(list, q))

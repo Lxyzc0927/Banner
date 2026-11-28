@@ -50,6 +50,7 @@ const config = {
   rootDir: ROOT_DIR,
   serverDir,
   adminDir: path.join(serverDir, 'public', 'admin'),
+  uploadDir: path.join(path.dirname(dbPath), 'uploads'),
   reportsDir: path.join(ROOT_DIR, 'reports'),
   port: int('PORT', 3000),
   host: process.env.HOST || '127.0.0.1',

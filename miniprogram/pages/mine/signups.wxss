@@ -14,4 +14,6 @@
 .place { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .light .num { color: var(--ink-2); }
 
+button.btn.cancel-signup { width: auto; height: 64rpx; margin: 16rpx 0 0; padding: 0 24rpx; font-size: 26rpx; }
+
 .sk-row { height: 128rpx; margin-top: 32rpx; }

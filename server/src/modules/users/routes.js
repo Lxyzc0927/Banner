@@ -211,7 +211,7 @@ function register(router) {
     const total = ctx.db.prepare('SELECT COUNT(*) AS count FROM signup WHERE user_id = ?').get(ctx.user.id).count;
     const rows = ctx.db
       .prepare(
-        `SELECT s.*, a.title AS activity_title, a.cover, a.location, a.start_at, a.end_at
+        `SELECT s.*, a.title AS activity_title, a.cover, a.location, a.start_at, a.end_at, a.status AS activity_status
          FROM signup s JOIN activity a ON a.id = s.activity_id
          WHERE s.user_id = ?
          ORDER BY s.created_at DESC
@@ -234,6 +234,7 @@ function register(router) {
           location: s.location,
           startAt: s.start_at,
           endAt: s.end_at,
+          status: s.activity_status,
         },
       })),
       total,

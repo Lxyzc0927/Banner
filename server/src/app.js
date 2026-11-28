@@ -8,6 +8,7 @@ const { getDb } = require('./db');
 const { Router, createContext } = require('./http');
 const { ApiError, errors, CODES } = require('./errors');
 const { randomId } = require('./auth');
+const { UPLOAD_BODY_MAX_BYTES, UPLOAD_PATH, IMAGE_MIME } = require('./modules/upload/routes');
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -42,21 +43,21 @@ function loadRoutes(router) {
   return entries;
 }
 
-function readBody(req, limit) {
+function readBody(req, limit, overflow = new ApiError(CODES.BAD_REQUEST, '请求体过大', 413)) {
   return new Promise((resolve, reject) => {
     const contentLength = Number(req.headers['content-length'] || 0);
     if (contentLength > limit) {
-      reject(new ApiError(CODES.BAD_REQUEST, '请求体过大', 413));
+      reject(overflow);
       req.resume();
       return;
     }
     const chunks = [];
     let size = 0;
     req.on('data', (chunk) => {
+      if (size > limit) return;
       size += chunk.length;
       if (size > limit) {
-        reject(new ApiError(CODES.BAD_REQUEST, '请求体过大', 413));
-        req.destroy();
+        reject(overflow);
         return;
       }
       chunks.push(chunk);
@@ -105,7 +106,33 @@ function sendStatic(ctx, adminDir) {
   return true;
 }
 
-function createApp({ db = getDb(), adminDir = config.adminDir } = {}) {
+async function sendUpload(req, res, pathname, uploadDir) {
+  const match = UPLOAD_PATH.exec(pathname);
+  if (!match || (req.method !== 'GET' && req.method !== 'HEAD')) throw errors.notFound('图片不存在');
+  const file = path.join(uploadDir, match[1]);
+  let handle;
+  try {
+    handle = await fs.promises.open(file, 'r');
+  } catch (error) {
+    if (error.code === 'ENOENT') throw errors.notFound('图片不存在');
+    throw error;
+  }
+  try {
+    const stat = await handle.stat();
+    if (!stat.isFile()) throw errors.notFound('图片不存在');
+    res.writeHead(200, {
+      'Content-Type': IMAGE_MIME[path.extname(file).slice(1)],
+      'Content-Length': stat.size,
+      'Cache-Control': 'public, max-age=86400',
+    });
+    if (req.method === 'HEAD') res.end();
+    else res.end(await handle.readFile());
+  } finally {
+    await handle.close();
+  }
+}
+
+function createApp({ db = getDb(), adminDir = config.adminDir, uploadDir = config.uploadDir } = {}) {
   const router = new Router();
   const modules = loadRoutes(router);
 
@@ -152,13 +179,21 @@ function createApp({ db = getDb(), adminDir = config.adminDir } = {}) {
         if (sendStatic({ req, res, method: req.method, path: url.pathname }, adminDir)) return;
         throw errors.notFound('页面不存在');
       }
+      if (url.pathname.startsWith('/uploads/')) {
+        await sendUpload(req, res, url.pathname, uploadDir);
+        return;
+      }
       if (!url.pathname.startsWith('/api/')) {
         throw errors.notFound('接口不存在');
       }
 
-      const rawBody = await readBody(req, config.limits.jsonBodyBytes);
-      const body = parseJsonBody(rawBody, req.headers['content-type']);
+      const upload = req.method === 'POST' && /^\/api\/upload\/?$/.test(url.pathname);
+      const body = upload ? {} : parseJsonBody(await readBody(req, config.limits.jsonBodyBytes), req.headers['content-type']);
       const ctx = createContext({ req, res, db, url, body, requestId });
+      if (upload) {
+        ctx.uploadDir = uploadDir;
+        ctx.readUpload = () => readBody(req, UPLOAD_BODY_MAX_BYTES, errors.badRequest('上传请求过大'));
+      }
       ctx.modules = modules;
       await router.dispatch(ctx);
 
@@ -167,6 +202,7 @@ function createApp({ db = getDb(), adminDir = config.adminDir } = {}) {
         ctx.ok(null);
       }
     } catch (error) {
+      req.resume();
       sendError(res, error, requestId);
     } finally {
       const ms = Date.now() - startedAt;
@@ -209,8 +245,8 @@ function sendError(res, error, requestId) {
   res.end(body);
 }
 
-function startServer({ port = config.port, host = config.host, db = getDb(), adminDir = config.adminDir } = {}) {
-  const app = createApp({ db, adminDir });
+function startServer({ port = config.port, host = config.host, db = getDb(), adminDir = config.adminDir, uploadDir = config.uploadDir } = {}) {
+  const app = createApp({ db, adminDir, uploadDir });
   const server = http.createServer((req, res) => {
     app.handle(req, res).catch((error) => {
       console.error('[fatal]', error);
