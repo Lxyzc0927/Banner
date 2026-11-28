@@ -10,7 +10,8 @@ const assert = require('node:assert/strict');
 const http = require('node:http');
 const { once } = require('node:events');
 const { spawnSync } = require('node:child_process');
-const { mkdtempSync, rmSync } = require('node:fs');
+const { mkdtempSync, readFileSync, rmSync } = require('node:fs');
+const vm = require('node:vm');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
 
@@ -897,5 +898,106 @@ describe('v1.7 内容初始化、上传与展示', () => {
     assert.equal(favorites.list[0].id, bikeId);
     assert.equal((await api(detailPath, { token })).body.data.favorited, true);
     assert.equal((await api(favoritePath, { method: 'DELETE', token })).body.data.favorited, false);
+  });
+});
+
+function runFrontend(file, context, transform = source => source) {
+  const filename = path.resolve(__dirname, '../..', file);
+  const source = readFileSync(filename, 'utf8');
+  vm.runInContext(transform(source), context, { filename });
+}
+
+describe('v1.7 联调回归', () => {
+  test('后台 Banner 表单允许留空创建和修改 sort=0 的标题', async () => {
+    const fields = {
+      '#f-title': { value: '默认排序' }, '#f-sort': { value: '' }, '#f-link': { value: '' },
+      '#e-sort': {}, '#btn-save': {}, '#f-file': {}, '#modal-root': {},
+    };
+    const DB = { banners: [] };
+    const context = vm.createContext({
+      DB,
+      document: { querySelector: name => fields[name], querySelectorAll: () => [] },
+      Bridge: {
+        isReal: () => true,
+        async mutate(action, payload) {
+          const suffix = payload.editId ? '/' + payload.editId : '';
+          if (!payload.editId) assert.equal(payload.sort, undefined);
+          const { body } = await api('/api/admin/banners' + suffix, {
+            method: payload.editId ? 'PUT' : 'POST', token: superToken,
+            body: { title: payload.title, sort: payload.sort, ...(payload.imageFile ? { image: '/test.png' } : {}) },
+          });
+          assert.equal(body.code, 0);
+          payload.savedId = body.data.id;
+          return true;
+        },
+      },
+    });
+    runFrontend('admin/js/app.js', context, source => source.replace(/boot\(\);\s*$/, ''));
+    await vm.runInContext('toast = () => {}; pendingFile = {}; saveBanner()', context);
+    const banner = DB.banners[0];
+    assert.equal(banner.sort, 0);
+    fields['#f-sort'].value = '0';
+    fields['#f-title'].value = '修改标题';
+    context.bannerId = banner.id;
+    await vm.runInContext('state.editId = bannerId; saveBanner()', context);
+    const { body } = await api('/api/admin/banners', { token: superToken });
+    const saved = body.data.list.find(item => item.id === banner.id);
+    assert.equal(saved.sort, 0);
+    assert.equal(saved.title, '修改标题');
+    for (const value of ['1.5', 'abc', '1e2', '9007199254740992']) {
+      fields['#f-sort'].value = value;
+      fields['#e-sort'].textContent = '';
+      await vm.runInContext('saveBanner()', context);
+      assert.match(fields['#e-sort'].textContent, /安全整数/);
+    }
+    for (const sort of ['abc', '1', true, null, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+      const response = await api('/api/admin/banners/' + banner.id, {
+        method: 'PUT', token: superToken, body: { sort },
+      });
+      assert.equal(response.status, 400);
+    }
+    for (const value of ['-2', String(Number.MIN_SAFE_INTEGER), String(Number.MAX_SAFE_INTEGER)]) {
+      fields['#f-sort'].value = value;
+      await vm.runInContext('state.editId = bannerId; saveBanner()', context);
+      assert.equal(db.prepare('SELECT sort FROM banner WHERE id = ?').get(banner.id).sort, Number(value));
+    }
+    fields['#f-sort'].value = '';
+    await vm.runInContext('state.editId = bannerId; saveBanner()', context);
+    assert.equal(db.prepare('SELECT sort FROM banner WHERE id = ?').get(banner.id).sort, Number.MAX_SAFE_INTEGER);
+  });
+
+  test('后台发布、下架和重新发布使用本机接口返回的阶段', async () => {
+    const id = insertActivity({ title: '未来活动阶段回写', status: 'draft' });
+    const DB = { activities: [{ id, rawStatus: 'draft', phase: 'draft', status: '未开始' }] };
+    const transition = async (activityId, op) => {
+      const { body } = await api('/api/admin/activities/' + activityId + '/' + op, { method: 'POST', token: superToken });
+      assert.equal(body.code, 0);
+      return body.data;
+    };
+    const context = vm.createContext({
+      DB, URLSearchParams, location: { search: '?real=1' },
+      document: { querySelector: () => null, querySelectorAll: () => [] },
+      activityCalls: { publish: id => transition(id, 'publish'), offline: id => transition(id, 'offline') },
+    });
+    runFrontend('admin/js/api.js', context);
+    vm.runInContext('Object.assign(Api.activities, activityCalls)', context);
+    runFrontend('admin/js/bridge.js', context);
+    runFrontend('admin/js/app.js', context, source => source.replace(/boot\(\);\s*$/, ''));
+    vm.runInContext('toast = () => {}', context);
+    for (const [phase, rawStatus, status] of [
+      ['upcoming', 'published', '未开始'], ['offline', 'offline', '已下架'], ['upcoming', 'published', '未开始'],
+    ]) {
+      await vm.runInContext('toggleActivity(DB.activities[0].id)', context);
+      assert.deepEqual([DB.activities[0].phase, DB.activities[0].rawStatus, DB.activities[0].status], [phase, rawStatus, status]);
+    }
+
+    context.location.search = '?real=0';
+    DB.activities = [{ id, date: iso(86400000).slice(0, 10), status: '未开始', rawStatus: 'draft' }];
+    await vm.runInContext('toggleActivity(DB.activities[0].id)', context);
+    assert.equal(DB.activities[0].phase, 'upcoming');
+    assert.equal(DB.activities[0].status, '未开始');
+    await vm.runInContext('toggleActivity(DB.activities[0].id)', context);
+    assert.equal(DB.activities[0].status, '已下架');
+    assert.equal(db.prepare('SELECT status FROM activity WHERE id = ?').get(id).status, 'published');
   });
 });
