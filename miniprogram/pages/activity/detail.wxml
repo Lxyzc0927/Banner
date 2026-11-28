@@ -1,0 +1,78 @@
+<empty wx:if="{{error}}" text="{{error}}" action-text="查看其他活动" bind:action="goList" />
+
+<view wx:elif="{{!activity}}" class="wrap" aria-busy="true">
+  <view class="skeleton sk-hero"></view>
+  <view class="skeleton sk-line"></view>
+</view>
+
+<view wx:else class="{{activity.ended ? 'ended' : ''}}">
+  <view class="wrap head">
+    <view class="plate board {{activity.yellow ? 'plate-yellow' : 'plate-white'}}">
+      <view class="board-date">
+        <text class="day">{{activity.day}}</text>
+        <text class="month">{{activity.month}}月</text>
+      </view>
+      <view class="board-side">
+        <text class="time">{{activity.time}}</text>
+        <text class="state {{activity.stateClass}}">{{activity.stateText}}</text>
+      </view>
+    </view>
+    <view class="title">{{activity.title}}</view>
+  </view>
+
+  <view class="wrap facts">
+    <view class="fact">
+      <image class="icon-s" src="/assets/icons/calendar-blank-bold-5a5a57.svg" aria-hidden="true" />
+      <text class="fact-label">时间</text><text class="fact-value">{{activity.timeText}}</text>
+    </view>
+    <view class="fact">
+      <image class="icon-s" src="/assets/icons/map-pin-bold-5a5a57.svg" aria-hidden="true" />
+      <text class="fact-label">地点</text><text class="fact-value">{{activity.location}}</text>
+    </view>
+    <view wx:if="{{activity.mySignup}}" class="fact">
+      <image class="icon-s" src="/assets/icons/flag-checkered-bold-5a5a57.svg" aria-hidden="true" />
+      <text class="fact-label">编号</text><text class="fact-value num">{{activity.mySignup.signupNo}}</text>
+    </view>
+    <view class="quota">
+      <view class="quota-head">
+        <text>已报名 <text class="num">{{activity.signupCount}}</text> 人，限 <text class="num">{{activity.quota}}</text> 人</text>
+        <text wx:if="{{!activity.ended && activity.remaining > 0}}" class="left">还剩 <text class="num">{{activity.remaining}}</text> 个名额</text>
+      </view>
+      <view class="meter"><view class="meter-fill {{activity.full ? 'full' : ''}}" style="width: {{activity.percent}}%"></view></view>
+    </view>
+  </view>
+
+  <view class="section">
+    <view class="section-head"><text class="section-title">活动介绍</text></view>
+    <text class="desc">{{activity.description}}</text>
+  </view>
+
+  <view class="bottom-gap"></view>
+  <view class="bottom-bar safe">
+    <button class="btn btn-primary btn-block" disabled="{{button.disabled}}" bindtap="onSignup">{{button.text}}</button>
+  </view>
+</view>
+
+<block wx:if="{{sheet}}">
+  <view class="mask" bindtap="closeSheet" catchtouchmove="noop"></view>
+  <view class="sheet" catchtouchmove="noop" aria-role="dialog" aria-label="报名表单">
+    <view class="sheet-head">
+      <text class="sheet-title">报名{{activity.title}}</text>
+      <view class="close" bindtap="closeSheet" aria-role="button" aria-label="关闭">
+        <image class="icon-s" src="/assets/icons/x-bold-5a5a57.svg" aria-hidden="true" />
+      </view>
+    </view>
+    <view class="field">
+      <text class="field-label">手机号</text>
+      <view wx:if="{{user.phone}}" class="field-static num">{{user.phone}}</view>
+      <button wx:else class="btn btn-ghost btn-block phone-btn" open-type="getPhoneNumber" bindgetphonenumber="onPhone">用微信手机号填写</button>
+      <text wx:if="{{errors.phone}}" class="field-error">{{errors.phone}}</text>
+    </view>
+    <view class="field">
+      <text class="field-label">备注（选填）</text>
+      <input class="field-input" value="{{form.remark}}" placeholder="比如同行人数、车型" placeholder-class="ph" maxlength="200" bindinput="onRemark" />
+    </view>
+    <view class="sheet-tip">信息只用于本次活动的联系和签到</view>
+    <button class="btn btn-primary btn-block" loading="{{submitting}}" disabled="{{submitting}}" bindtap="submit">确认报名</button>
+  </view>
+</block>

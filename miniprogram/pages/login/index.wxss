@@ -1,0 +1,12 @@
+.page { padding: 120rpx 48rpx 0; }
+.mark { width: 220rpx; height: 160rpx; font-size: 120rpx; border-width: 8rpx; border-radius: 32rpx; }
+.brand { font-size: 56rpx; font-weight: 800; letter-spacing: -1rpx; margin-top: 40rpx; }
+.slogan { font-size: 30rpx; color: var(--ink-2); margin-top: 8rpx; }
+.actions { margin-top: 120rpx; }
+.tip { font-size: 30rpx; margin-bottom: 28rpx; }
+.agree { display: flex; align-items: center; flex-wrap: wrap; min-height: 88rpx; margin-top: 16rpx; font-size: 26rpx; color: var(--ink-2); }
+.check { position: relative; width: 36rpx; height: 36rpx; margin-right: 12rpx; border: 3rpx solid var(--ink-2); border-radius: 8rpx; box-sizing: border-box; flex-shrink: 0; }
+.check.on { background: var(--ink); border-color: var(--ink); }
+.tick { position: absolute; left: 9rpx; top: 3rpx; width: 10rpx; height: 18rpx; border: solid var(--paper); border-width: 0 4rpx 4rpx 0; transform: rotate(45deg); }
+.link { color: var(--ink); text-decoration: underline; }
+.skip { display: flex; align-items: center; justify-content: center; min-height: 88rpx; margin-top: 16rpx; font-size: 26rpx; color: var(--ink-2); }

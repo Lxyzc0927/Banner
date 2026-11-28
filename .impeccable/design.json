@@ -1,0 +1,315 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-27T00:00:00+08:00",
+  "title": "Design System: XX 摩托",
+  "extensions": {
+    "colorMeta": {
+      "plate-black": {
+        "role": "primary",
+        "displayName": "Plate Black 号码牌黑",
+        "canonical": "#000000",
+        "tonalRamp": [
+          "#000000",
+          "#1a1a19",
+          "#2b2b29",
+          "#41413f",
+          "#5a5a57",
+          "#8c8c88",
+          "#c4c4c0",
+          "#f4f4f2"
+        ]
+      },
+      "mid-class-yellow": {
+        "role": "secondary",
+        "displayName": "Mid-Class Yellow 中排黄",
+        "canonical": "#ffd400",
+        "tonalRamp": [
+          "#3d3000",
+          "#5e4a00",
+          "#806600",
+          "#a88600",
+          "#d1a900",
+          "#ffd400",
+          "#ffe566",
+          "#fff6cc"
+        ]
+      },
+      "open-class-red": {
+        "role": "tertiary",
+        "displayName": "Open-Class Red 大排红",
+        "canonical": "#e10600",
+        "tonalRamp": [
+          "#3a0200",
+          "#5c0400",
+          "#860500",
+          "#b30500",
+          "#e10600",
+          "#ff4a3d",
+          "#ff9a91",
+          "#ffe0dd"
+        ]
+      },
+      "plate-white": {
+        "role": "neutral",
+        "displayName": "Plate White 号码牌白",
+        "canonical": "#ffffff",
+        "tonalRamp": [
+          "#1a1a19",
+          "#2b2b29",
+          "#41413f",
+          "#5a5a57",
+          "#8c8c88",
+          "#c4c4c0",
+          "#f4f4f2",
+          "#ffffff"
+        ]
+      },
+      "paddock-concrete": {
+        "role": "neutral",
+        "displayName": "Paddock Concrete 围场水泥",
+        "canonical": "#f4f4f2",
+        "tonalRamp": [
+          "#000000",
+          "#1a1a19",
+          "#2b2b29",
+          "#41413f",
+          "#5a5a57",
+          "#8c8c88",
+          "#c4c4c0",
+          "#f4f4f2"
+        ]
+      },
+      "hairline-chalk": {
+        "role": "neutral",
+        "displayName": "Hairline Chalk 细线粉笔",
+        "canonical": "#d9d9d6",
+        "tonalRamp": [
+          "#1a1a19",
+          "#2b2b29",
+          "#41413f",
+          "#5a5a57",
+          "#8c8c88",
+          "#b3b3af",
+          "#d9d9d6",
+          "#f4f4f2"
+        ]
+      },
+      "pit-graphite": {
+        "role": "neutral",
+        "displayName": "Pit Graphite 维修区石墨",
+        "canonical": "#5a5a57",
+        "tonalRamp": [
+          "#000000",
+          "#1a1a19",
+          "#2b2b29",
+          "#41413f",
+          "#5a5a57",
+          "#8c8c88",
+          "#c4c4c0",
+          "#f4f4f2"
+        ]
+      },
+      "dust-grey": {
+        "role": "neutral",
+        "displayName": "Dust Grey 扬尘灰",
+        "canonical": "#8c8c88",
+        "tonalRamp": [
+          "#000000",
+          "#1a1a19",
+          "#2b2b29",
+          "#41413f",
+          "#5a5a57",
+          "#8c8c88",
+          "#c4c4c0",
+          "#f4f4f2"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "display": {
+        "displayName": "Display / Plate",
+        "purpose": "号码牌大数字：详情头部、活动日期、首页 Banner、登录品牌牌。"
+      },
+      "numeral": {
+        "displayName": "Numeral / Plate",
+        "purpose": "价格、参数、名额、日期等所有需要比较的数字，等宽。"
+      },
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "车型名、活动名、Banner 标题。"
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "区块标题、弹层标题；列表名称为 600 / 32rpx。"
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "正文与输入；长段介绍行高 1.8。"
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "元信息、表单标签、小按钮、状态标记。"
+      }
+    },
+    "shadows": [
+      {
+        "name": "scrim",
+        "value": "rgba(0,0,0,.5)",
+        "purpose": "弹层遮罩，不是阴影。"
+      }
+    ],
+    "motion": [
+      {
+        "name": "press-sink",
+        "value": "transform: translateY(4rpx); transition: transform 120ms ease-out",
+        "purpose": "号码牌、Banner、芯片、价格按钮按下下沉 4rpx（2px）；按钮为 2rpx（1px）。"
+      },
+      {
+        "name": "press-fill",
+        "value": "background-color 120ms ease-out; hover-stay-time 80ms",
+        "purpose": "整行条目按下换围场水泥底。"
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "phone",
+        "value": "750rpx = 屏宽（375pt 宽下 1rpx = 0.5px）"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Number Plate (tier ladder)",
+      "kind": "custom",
+      "refersTo": "plate-white",
+      "description": "签名组件：排量号码牌，颜色按档位固定（白 150/250、黄 300/400、红 500），按下下沉 2px。",
+      "html": "<div class=\"ds-plates\"><span class=\"ds-plate\" tabindex=\"0\">150</span><span class=\"ds-plate ds-plate-yellow\" tabindex=\"0\">300</span><span class=\"ds-plate ds-plate-red\" tabindex=\"0\">500</span></div>",
+      "css": ".ds-plates{display:flex;gap:12px} .ds-plate{display:inline-flex;align-items:center;justify-content:center;width:76px;height:56px;border:3px solid #000;border-radius:10px;background:#fff;color:#000;font-family:\"Plate\",\"DIN Alternate\",\"Helvetica Neue\",Arial,sans-serif;font-weight:900;font-stretch:62%;font-variant-numeric:tabular-nums;font-size:32px;line-height:1;transition:transform 120ms ease-out;cursor:pointer} .ds-plate-yellow{background:#ffd400} .ds-plate-red{background:#e10600;color:#fff;border-color:#e10600} .ds-plate:active{transform:translateY(2px)} .ds-plate:focus-visible{outline:2px solid #000;outline-offset:3px}"
+    },
+    {
+      "name": "Hero Plate",
+      "kind": "custom",
+      "refersTo": "plate-hero",
+      "description": "详情页头部满宽大号码牌，10rpx 描边、40rpx 圆角，带 cc 单位。",
+      "html": "<div class=\"ds-hero-plate\">400<span class=\"ds-hero-unit\">cc</span></div>",
+      "css": ".ds-hero-plate{display:flex;align-items:center;justify-content:center;width:100%;max-width:340px;height:180px;border:5px solid #000;border-radius:20px;background:#ffd400;color:#000;font-family:\"Plate\",\"DIN Alternate\",\"Helvetica Neue\",Arial,sans-serif;font-weight:900;font-stretch:62%;font-variant-numeric:tabular-nums;font-size:130px;line-height:1} .ds-hero-unit{font-size:.3em;margin-left:.12em;align-self:flex-end;margin-bottom:.55em}"
+    },
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "每页唯一的黑色主操作（立即报名、确认报名、看看活动）。",
+      "html": "<button class=\"ds-btn-primary\">立即报名</button>",
+      "css": ".ds-btn-primary{display:flex;align-items:center;justify-content:center;height:48px;padding:0 18px;border:none;border-radius:8px;background:#000;color:#fff;font-family:-apple-system,\"PingFang SC\",\"HarmonyOS Sans SC\",\"Microsoft YaHei\",sans-serif;font-size:15px;font-weight:600;transition:transform 120ms ease-out,background-color 120ms ease-out;cursor:pointer} .ds-btn-primary:hover{background:#2b2b29} .ds-btn-primary:active{background:#2b2b29;transform:translateY(1px)} .ds-btn-primary:focus-visible{outline:2px solid #000;outline-offset:3px} .ds-btn-primary:disabled{background:#f4f4f2;color:#8c8c88}"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "次操作（问客服、清除筛选），白底黑描边。",
+      "html": "<button class=\"ds-btn-ghost\">问客服</button>",
+      "css": ".ds-btn-ghost{display:flex;align-items:center;justify-content:center;height:48px;padding:0 18px;border:1px solid #000;border-radius:8px;background:#fff;color:#000;font-family:-apple-system,\"PingFang SC\",\"HarmonyOS Sans SC\",\"Microsoft YaHei\",sans-serif;font-size:15px;font-weight:600;transition:transform 120ms ease-out,background-color 120ms ease-out;cursor:pointer} .ds-btn-ghost:hover{background:#f4f4f2} .ds-btn-ghost:active{background:#f4f4f2;transform:translateY(1px)} .ds-btn-ghost:focus-visible{outline:2px solid #000;outline-offset:3px}"
+    },
+    {
+      "name": "Tier Filter Chips",
+      "kind": "chip",
+      "refersTo": "chip-plate",
+      "description": "筛选芯片：「全部」选中黑底；排量芯片是小号码牌，选中显示档位色并加粗描边。",
+      "html": "<div class=\"ds-chips\"><button class=\"ds-chip ds-chip-all\">全部</button><button class=\"ds-chip ds-chip-plate\">150</button><button class=\"ds-chip ds-chip-plate ds-on ds-chip-yellow\">300</button><button class=\"ds-chip ds-chip-plate\">500</button></div>",
+      "css": ".ds-chips{display:flex;gap:8px} .ds-chip{display:inline-flex;align-items:center;justify-content:center;height:44px;border:1px solid #000;border-radius:8px;background:#fff;color:#000;transition:transform 120ms ease-out;cursor:pointer} .ds-chip-all{padding:0 14px;font-family:-apple-system,\"PingFang SC\",\"HarmonyOS Sans SC\",\"Microsoft YaHei\",sans-serif;font-size:14px;font-weight:600} .ds-chip-all.ds-on{background:#000;color:#fff} .ds-chip-plate{min-width:60px;padding:0 10px;font-family:\"Plate\",\"DIN Alternate\",\"Helvetica Neue\",Arial,sans-serif;font-weight:900;font-stretch:62%;font-variant-numeric:tabular-nums;font-size:18px} .ds-chip-plate.ds-on{border-width:3px} .ds-chip-yellow{background:#ffd400} .ds-chip:active{transform:translateY(2px)} .ds-chip:focus-visible{outline:2px solid #000;outline-offset:2px}"
+    },
+    {
+      "name": "Bike Row",
+      "kind": "card",
+      "refersTo": "bike-row",
+      "description": "车型列表行：左小号码牌、中名称与类别｜档位、右 Plate 价格；行底细线，按下变浅灰且牌子下沉。",
+      "html": "<div class=\"ds-row\" tabindex=\"0\"><span class=\"ds-row-plate\">400</span><div class=\"ds-row-info\"><div class=\"ds-row-name\">XX 悦途 400</div><div class=\"ds-row-meta\">踏板<span class=\"ds-row-sep\">中排</span></div></div><div class=\"ds-row-price\"><span class=\"ds-yen\">¥</span>37,800</div></div>",
+      "css": ".ds-row{display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid #d9d9d6;background:#fff;font-family:-apple-system,\"PingFang SC\",\"HarmonyOS Sans SC\",\"Microsoft YaHei\",sans-serif;color:#000;cursor:pointer} .ds-row:active{background:#f4f4f2} .ds-row:focus-visible{outline:2px solid #000;outline-offset:2px} .ds-row-plate{display:inline-flex;align-items:center;justify-content:center;width:76px;height:56px;flex-shrink:0;border:3px solid #000;border-radius:10px;background:#ffd400;font-family:\"Plate\",\"DIN Alternate\",\"Helvetica Neue\",Arial,sans-serif;font-weight:900;font-stretch:62%;font-variant-numeric:tabular-nums;font-size:32px;line-height:1;transition:transform 120ms ease-out} .ds-row:active .ds-row-plate{transform:translateY(2px)} .ds-row-info{flex:1;min-width:0} .ds-row-name{font-size:16px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis} .ds-row-meta{font-size:13px;color:#5a5a57;margin-top:2px} .ds-row-sep{margin-left:8px;padding-left:8px;border-left:1px solid #d9d9d6} .ds-row-price{flex-shrink:0;font-family:\"Plate\",\"DIN Alternate\",\"Helvetica Neue\",Arial,sans-serif;font-weight:900;font-stretch:62%;font-variant-numeric:tabular-nums;font-size:20px} .ds-yen{font-family:-apple-system,\"PingFang SC\",\"HarmonyOS Sans SC\",\"Microsoft YaHei\",sans-serif;font-size:13px;font-weight:600;margin-right:1px}"
+    },
+    {
+      "name": "Search Bar",
+      "kind": "input",
+      "refersTo": "search-bar",
+      "description": "无描边浅灰搜索框，提示里写在售数量。",
+      "html": "<label class=\"ds-search\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 256 256\" fill=\"#5a5a57\" aria-hidden=\"true\"><path d=\"M232.49,215.51,185,168a92.12,92.12,0,1,0-17,17l47.53,47.54a12,12,0,0,0,17-17ZM44,112a68,68,0,1,1,68,68A68.07,68.07,0,0,1,44,112Z\"/></svg><input placeholder=\"在 23 款在售车型里搜\"></label>",
+      "css": ".ds-search{display:flex;align-items:center;gap:8px;height:44px;padding:0 14px;border-radius:8px;background:#f4f4f2;font-family:-apple-system,\"PingFang SC\",\"HarmonyOS Sans SC\",\"Microsoft YaHei\",sans-serif} .ds-search:active{background:#ebebe8} .ds-search:focus-within{box-shadow:inset 0 0 0 1px #000} .ds-search input{flex:1;border:none;background:transparent;font-size:15px;color:#000;outline:none;font-family:inherit} .ds-search input::placeholder{color:#5a5a57}"
+    },
+    {
+      "name": "Form Field",
+      "kind": "input",
+      "refersTo": "input-field",
+      "description": "报名弹层与价格区间输入：白底细线描边，错误时描边与提示变红。",
+      "html": "<div class=\"ds-field\"><label class=\"ds-field-label\">姓名</label><input class=\"ds-field-input\" placeholder=\"和证件上一致，方便签到\"><input class=\"ds-field-input ds-invalid\" value=\"1\"><span class=\"ds-field-error\">请填写真实姓名</span></div>",
+      "css": ".ds-field{display:flex;flex-direction:column;gap:6px;font-family:-apple-system,\"PingFang SC\",\"HarmonyOS Sans SC\",\"Microsoft YaHei\",sans-serif} .ds-field-label{font-size:13px;font-weight:600;color:#000} .ds-field-input{height:48px;padding:0 12px;border:1px solid #d9d9d6;border-radius:8px;background:#fff;font-size:15px;color:#000;font-family:inherit} .ds-field-input::placeholder{color:#8c8c88} .ds-field-input:focus-visible{outline:none;border-color:#000} .ds-invalid{border-color:#e10600} .ds-field-error{font-size:13px;color:#e10600}"
+    },
+    {
+      "name": "Status Marks",
+      "kind": "chip",
+      "refersTo": "state-open",
+      "description": "活动状态标记，颜色之外总带文字。",
+      "html": "<div class=\"ds-states\"><span class=\"ds-state ds-state-open\">报名中</span><span class=\"ds-state ds-state-signed\">已报名</span><span class=\"ds-state ds-state-full\">名额已满</span><span class=\"ds-state ds-state-ended\">已结束</span></div>",
+      "css": ".ds-states{display:flex;gap:8px;font-family:-apple-system,\"PingFang SC\",\"HarmonyOS Sans SC\",\"Microsoft YaHei\",sans-serif} .ds-state{display:inline-flex;align-items:center;height:22px;padding:0 7px;border-radius:4px;font-size:12px;font-weight:600} .ds-state-open{background:#ffd400;color:#000} .ds-state-signed{background:#000;color:#fff} .ds-state-full{border:1px solid #e10600;color:#e10600} .ds-state-ended{background:#f4f4f2;color:#5a5a57}"
+    },
+    {
+      "name": "Page Tabs",
+      "kind": "nav",
+      "refersTo": "page-tabs",
+      "description": "页内页签：等分，选中黑色 700 加黄色短下划线。",
+      "html": "<nav class=\"ds-tabs\"><a class=\"ds-tab ds-on\" href=\"#\">全部</a><a class=\"ds-tab\" href=\"#\">报名中</a><a class=\"ds-tab\" href=\"#\">已结束</a></nav>",
+      "css": ".ds-tabs{display:flex;border-bottom:1px solid #d9d9d6;background:#fff;font-family:-apple-system,\"PingFang SC\",\"HarmonyOS Sans SC\",\"Microsoft YaHei\",sans-serif} .ds-tab{flex:1;position:relative;height:48px;line-height:48px;text-align:center;font-size:15px;color:#5a5a57;text-decoration:none} .ds-tab:hover{color:#000} .ds-tab:active{background:#f4f4f2} .ds-tab:focus-visible{outline:2px solid #000;outline-offset:-2px} .ds-tab.ds-on{color:#000;font-weight:700} .ds-tab.ds-on::after{content:\"\";position:absolute;left:50%;bottom:0;width:32px;height:4px;margin-left:-16px;border-radius:2px;background:#ffd400}"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Number Board（车头号码牌）",
+    "overview": "整个小程序是一面贴满越野号码牌的白墙。每款车用一块号码牌代表：黑色粗描边、大圆角、压窄的超粗数字写着排量，牌子的颜色就是它的排量档位（白牌 150/250 入门、黄牌 300/400 中排、红牌 500 大排）。用户先看颜色和数字认出档位，再读名字和价格。号码牌是界面里唯一的色块，其余一切退回白底、黑字和 1 物理像素细线。\n\n版面是竖向列表而不是商品卡宫格：一行一款车，左牌、中名、右价，行与行之间只有细线。密度偏紧凑但触控目标不小于 88rpx（44px）。深度几乎为零，靠描边粗细、黑白反相和三档明度区分层级；唯一的动作语言是「按下时号码牌下沉」，像牌子被压在车头上。\n\n商城小程序的白底圆角双列商品卡和宫格彩色图标是本系统明确拒绝的形态。",
+    "keyCharacteristics": [
+      "号码牌即档位：颜色固定映射排量，不做装饰用途。",
+      "白底黑字，三档明度（黑 / 石墨灰 / 浅灰），色块只来自号码牌与黄色的三种状态。",
+      "所有数字（排量、价格、参数、日期、名额）用压窄 900 的 Plate 字体，等宽数字。",
+      "分隔一律 1 物理像素细线；粗黑线（2rpx）只用于参数表和推荐列表的顶边。",
+      "按压反馈：号码牌与按钮下沉 4rpx（2px），行背景变浅灰，120ms ease-out。"
+    ],
+    "rules": [
+      {
+        "name": "The Plate Ladder Rule",
+        "body": "排量档位颜色固定：150/250 白牌、300/400 黄牌、500 红牌白字。同一档位在列表行、详情头、筛选芯片上颜色一致；不得为了好看改色或新增档位色。",
+        "section": "colors"
+      },
+      {
+        "name": "The Only Color Block Rule",
+        "body": "界面上的实心色块只能是号码牌，以及黄色的三种状态。卡片、区块、标题栏不得填充黄色或红色。",
+        "section": "colors"
+      },
+      {
+        "name": "The Never Color Alone Rule",
+        "body": "状态标记总带文字（报名中 / 已报名 / 名额已满 / 已结束），颜色从不独自表达状态。",
+        "section": "colors"
+      },
+      {
+        "name": "The Plate Numerals Rule",
+        "body": "凡是用户要比较的数字（排量、价格、参数、日期、时间、名额）都用 Plate 900 等宽数字；单位（cc、kW、¥、人）缩小并降到石墨灰或小字号，数字本身保持纯黑。",
+        "section": "typography"
+      },
+      {
+        "name": "The Press-Sink Rule",
+        "body": "深度只在按下时出现：号码牌、Banner、芯片、按钮下沉 4rpx（按钮 2rpx），120ms ease-out；整行条目则把背景换成围场水泥色。没有悬浮抬升。",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "**Do** 用号码牌表示每款车的排量，按 Plate Ladder 上色：150/250 白、300/400 黄（#ffd400）、500 红（#e10600）白字。",
+      "**Do** 所有比较用数字用 Plate 900 等宽数字，单位缩小。",
+      "**Do** 用 1 物理像素细线（hairline-chalk）分隔行与区块，用黑白反相表示选中。",
+      "**Do** 按压时号码牌与按钮下沉（4rpx / 2rpx，120ms ease-out），整行条目换围场水泥底。",
+      "**Do** 保持所有可点目标至少 88rpx 高，状态标记总带文字。",
+      "**Do** 每页只放一个黑色主按钮。"
+    ],
+    "donts": [
+      "**Don't** 用白底圆角双列商品卡或宫格彩色图标做列表与入口。",
+      "**Don't** 把黄色或红色用在号码牌和既定状态以外的地方（区块底色、标题装饰、图标着色）。",
+      "**Don't** 给任何元素加投影；选中状态一律用黑白反相。",
+      "**Don't** 用 Plate 排汉字，或用系统字体排价格与参数数字。",
+      "**Don't** 在三档明度（plate-black / pit-graphite / dust-grey）之外引入新的文字灰。"
+    ]
+  }
+}
