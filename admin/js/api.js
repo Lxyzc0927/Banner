@@ -1,6 +1,6 @@
 /* ============================================================
  * api.js · 管理后台统一接口层（组员 B / 杨乐曈）
- * 依据：D 服务端 51bc0d3 实现为准 + 组长 11.27 联调修改意见（第 2 条），2026-11-27
+ * 依据：API.md v1.6（C 的 71fc209，2026-11-29 定稿）+ D 服务端实现 + 组长历轮复审意见
  *
  * 用法：
  *   1) 所有接口路径集中在 API 常量里，最终定值时只改这一处。
@@ -41,6 +41,14 @@
  *   - [P2] token/角色/归属版本合并为「单条会话记录」一次原子写入，消除分步写的中间态；
  *          读取时校验归属版本，失效记录直接忽略；旧响应写入失败不再 clearAll，
  *          避免把另一标签页刚写入的新会话一起删掉
+ *
+ * 同步 API.md v1.6（联调基线）：
+ *   - 活动发布/下架改专用路由：POST /:id/publish、POST /:id/offline（原 PUT {status} 作废）
+ *   - 分析接口补齐 8 个：新增 overview/channels/summary/insightsLatest
+ *   - 补用户详情/报名记录、管理员编辑/重置密码、后台当前信息
+ *   - 字段：banner 读管理端 linkType/linkUrl；admin 读 displayName；
+ *          趋势日期字段 day、漏斗读 steps[].sessions、模块读 moduleLabel
+ *   - 权限点数组 data.admin.permissions 随会话保存，Perm 优先按权限点、回退角色
  * ============================================================ */
 
 /* ---------- 全局配置：联调时只改这里 ---------- */
@@ -55,30 +63,45 @@ const API_CONFIG = {
   timeout: 10000
 };
 
-/* ---------- 路径常量：与 API.md v1.2 一一对应 ---------- */
+/* ---------- 路径常量：与 API.md v1.6 一一对应 ---------- */
 const API = {
-  // 登录
+  // 登录（D）
   login:        '/api/auth/admin/login',
+  me:           '/api/auth/admin/me',              // GET 后台当前信息 -> {admin}
   // 首页内容（C）
+  home:         '/api/home',                       // GET 首页聚合 -> {banners, news, hotBikes}
   banners:      '/api/admin/banners',              // GET/POST/PUT/DELETE
   news:         '/api/admin/news',                 // GET/POST/PUT/DELETE
   hotBikes:     '/api/bikes/hot',                  // GET?limit=
   // 车型（C）
   bikes:        '/api/admin/bikes',                // GET/POST/PUT/DELETE
+  bikeFilters:  '/api/bikes/filters',              // GET -> {categories, tags}
   upload:       '/api/upload',                     // POST form-data:file -> {url}
-  // 活动与报名（D）
-  activities:   '/api/admin/activities',           // GET/POST/PUT/DELETE
+  // 活动与报名（D）—— 后台无删除路由，下架用专用 offline
+  activities:   '/api/admin/activities',           // GET 列表 / POST 新增(201)
+  activity:     id => `/api/admin/activities/${id}`,             // GET 详情(直接是活动对象) / PUT 编辑(回传 version)
+  activityStats:id => `/api/admin/activities/${id}/stats`,       // GET 活动统计
+  publish:      id => `/api/admin/activities/${id}/publish`,     // POST 发布
+  offline:      id => `/api/admin/activities/${id}/offline`,     // POST 下架（不是 PUT {status}）
   signups:      id => `/api/admin/activities/${id}/signups`,
-  exportUrl:    id => `/api/admin/activities/${id}/signups/export`,   // CSV 流，信封例外
+  exportUrl:    id => `/api/admin/activities/${id}/signups/export`, // CSV 流，信封例外
   // 用户与管理员（D）
   users:        '/api/admin/users',
+  user:         id => `/api/admin/users/${id}`,                // GET 用户详情
+  userSignups:  id => `/api/admin/users/${id}/signups`,        // GET 用户报名记录
   userStatus:   id => `/api/admin/users/${id}/status`,
   admins:       '/api/admin/admins',
-  // 数据分析（D）—— 以服务端 51bc0d3 实际路由为准
-  moduleHot:    '/api/admin/analytics/modules',     // 原 module-hot → modules
+  admin:        id => `/api/admin/admins/${id}`,               // PUT 编辑管理员
+  resetAdminPwd:id => `/api/admin/admins/${id}/reset-password`, // POST 重置密码
+  // 数据分析（D）—— v1.6 共 8 个
+  overview:     '/api/admin/analytics/overview',
+  moduleHot:    '/api/admin/analytics/modules',
   trend:        '/api/admin/analytics/trend',
   funnel:       '/api/admin/analytics/funnel',
-  interpret:    '/api/admin/analytics/interpret',   // 原 interpretation → interpret
+  channels:     '/api/admin/analytics/channels',
+  summary:      '/api/admin/analytics/summary',
+  insightsLatest:'/api/admin/analytics/insights/latest',
+  interpret:    '/api/admin/analytics/interpret',
   // 小程序端（A）参考：手机号授权 / 我的报名
   wxPhone:      '/api/auth/wechat/phone',          // POST { code } -> 绑定手机号
   mySignups:    '/api/users/me/signups'            // GET 我的报名
@@ -115,6 +138,7 @@ const Token = {
   },
   get()     { const rec = this.read(); return rec ? (rec.token || '') : ''; },
   getRole() { const rec = this.read(); return rec ? (rec.role || '') : ''; },
+  getPermissions() { const rec = this.read(); return rec && Array.isArray(rec.permissions) ? rec.permissions : []; },
   setRole(r) {
     const rec = this.read();
     if (rec && r) {
@@ -122,12 +146,12 @@ const Token = {
       localStorage.setItem(API_CONFIG.sessionKey, JSON.stringify(rec));
     }
   },
-  // 单条原子写入：一次 setItem 写完 token/角色/归属版本，没有分步写的中间态。
+  // 单条原子写入：一次 setItem 写完 token/角色/权限点/归属版本，没有分步写的中间态。
   // 版本不符时只抛错丢弃本次写入，绝不清 localStorage —— 不能误删别页的新会话。
-  setSession(t, r, exitVersion) {
+  setSession(t, r, exitVersion, permissions) {
     if (exitVersion !== this.logoutVersion()) throw new Error('SESSION_INVALIDATED');
     localStorage.setItem(API_CONFIG.sessionKey, JSON.stringify({
-      token: t, role: r || '', owner: exitVersion
+      token: t, role: r || '', permissions: Array.isArray(permissions) ? permissions : [], owner: exitVersion
     }));
     // 写后复核：若写入瞬间发生了退出，仅报错让调用方知道本次登录未落地；
     // 失效记录留在存储里但读取时会被忽略，不去 clearAll 误伤新会话。
@@ -226,9 +250,27 @@ async function request(path, opts = {}) {
  *   角色：super_admin / operator
  */
 const PHASE_LABEL = { draft: '未开始', upcoming: '未开始', ongoing: '进行中', ended: '已结束', offline: '已下架' };
+// 管理端 banner 返回原始 linkType/linkUrl，C 端返回拼好的 link；两种都兼容
+const LINK_TYPE_PATH = { bike: '/bike/', activity: '/activity/' };
+function joinLink(type, url) {
+  if (!type) return '';
+  const prefix = LINK_TYPE_PATH[type];
+  if (!prefix || !url) return '';
+  return prefix + url;
+}
 const Adapt = {
-  banner:  b => ({ id: b.id, title: b.title, image: b.image || '', link: b.link || '', sort: b.sort, status: b.status === 1 ? '上架' : '下架' }),
-  bike:    b => ({ id: b.id, name: b.name, price: b.price / 100, cc: b.cc, status: b.status === 1 ? '上架' : '下架' }),
+  // 管理端：{linkType, linkUrl} -> link；C 端：已有 link 直接透传
+  banner: b => ({
+    id: b.id, title: b.title,
+    image: b.image || b.cover || '',
+    link: b.link || joinLink(b.linkType, b.linkUrl),
+    linkType: b.linkType || '', linkUrl: b.linkUrl || '',
+    sort: b.sort,
+    status: b.status === 1 ? '上架' : '下架',
+    rawStatus: b.status
+  }),
+  // 响应 price 单位分 -> 展示元；query 的 minPrice/maxPrice 仍按元发送
+  bike: b => ({ id: b.id, name: b.name, category: b.category || '', price: b.price / 100, cc: b.cc, cover: b.cover || '', status: b.status === 1 ? '上架' : '下架' }),
   price:   fen => fen / 100,
   yuanToFen: yuan => Math.round(Number(yuan) * 100),
   activity: a => ({
@@ -241,11 +283,13 @@ const Adapt = {
     status: PHASE_LABEL[a.phase] || (a.status === 'published' ? '进行中' : a.status === 'offline' ? '已下架' : '未开始'),
     rawStatus: a.status,
     statusLabel: a.statusLabel,
-    signupOpen: !!a.signupOpen
+    signupOpen: !!a.signupOpen,
+    version: a.version                     // 编辑活动需原样回传，防 1012 并发冲突
   }),
   // 状态为字符串枚举：active / disabled
   user: u => ({ id: u.id, name: u.nickname || u.name, phone: u.phone, status: u.status === 'active' ? '正常' : '禁用', rawStatus: u.status, disabledReason: u.disabledReason || '' }),
-  admin: a => ({ id: a.id, name: a.username || a.name, role: a.role === 'super_admin' ? '超级管理员' : '运营管理员', rawRole: a.role, status: a.status === 'active' ? '启用' : '禁用', rawStatus: a.status })
+  // v1.6：管理员展示名读 displayName，回退 username/name
+  admin: a => ({ id: a.id, name: a.displayName || a.username || a.name, displayName: a.displayName || '', username: a.username || '', role: a.role === 'super_admin' ? '超级管理员' : '运营管理员', rawRole: a.role, status: a.status === 'active' ? '启用' : '禁用', rawStatus: a.status })
 };
 
 /* ---------- 各模块调用方法（供页面直接调用） ----------
@@ -267,10 +311,10 @@ const Api = {
     }
     // 先递增会话版本，再写入新 token/角色：让此前发出的旧请求 401 无法清理这次新登录
     Token.bump();
-    // 角色读 data.admin.role（服务端返回 { token, tokenType, expiresIn, admin: {...} }）
-    const role = data && data.admin && data.admin.role;
-    Token.setSession(data.token, role, exitVersion);   // 写入时复查退出版本，跨页退出会使其失效
-    return data;   // { token, admin: { id, username, role, ... } }
+    // 角色读 data.admin.role，权限点读 data.admin.permissions（v1.6 后端按权限点鉴权）
+    const admin = (data && data.admin) || {};
+    Token.setSession(data.token, admin.role, exitVersion, admin.permissions);  // 写入时复查退出版本，跨页退出会使其失效
+    return data;   // { token, admin: { id, username, displayName, role, permissions, ... } }
   },
 
   // 退出登录：换新共享尝试标识使所有标签页的在途登录失效，递增退出版本使旧会话记录失效，
@@ -282,6 +326,10 @@ const Api = {
     Token.clearAll();
   },
 
+  me: () => request(API.me, { silent: true }),   // -> {admin}
+  // 首页聚合 / 筛选项（C 端，供后台预览联调用）
+  home:        () => request(API.home, { silent: true }),
+  bikeFilters: () => request(API.bikeFilters, { silent: true }),
   banners: {
     list:   q => request(API.banners, { query: q, silent: true }),
     create: b => request(API.banners, { method: 'POST', body: b }),
@@ -295,10 +343,12 @@ const Api = {
     remove: id => request(API.news + '/' + id, { method: 'DELETE' })
   },
   bikes: {
-    list:   q => request(API.bikes, { query: q, silent: true }),
-    create: b => request(API.bikes, { method: 'POST', body: b }),
-    update: (id, b) => request(API.bikes + '/' + id, { method: 'PUT', body: b }),
-    remove: id => request(API.bikes + '/' + id, { method: 'DELETE' })
+    // 查询参数 minPrice/maxPrice 单位为元；响应 price 为分，展示时套 Adapt.bike / Adapt.price
+    list:    q => request(API.bikes, { query: q, silent: true }),
+    detail:  id => request('/api/bikes/' + id, { silent: true }),
+    create:  b => request(API.bikes, { method: 'POST', body: b }),
+    update:  (id, b) => request(API.bikes + '/' + id, { method: 'PUT', body: b }),
+    remove:  id => request(API.bikes + '/' + id, { method: 'DELETE' })
   },
   upload: async file => {
     const fd = new FormData();
@@ -308,9 +358,15 @@ const Api = {
 
   activities: {
     list:    q => request(API.activities, { query: q, silent: true }),
-    publish: b => request(API.activities, { method: 'POST', body: b }),
-    update:  (id, b) => request(API.activities + '/' + id, { method: 'PUT', body: b }),
-    offline: id => request(API.activities + '/' + id, { method: 'PUT', body: { status: 'offline' } }),
+    // 新增（返回 201，data 直接是活动对象）；字段名驼峰，别传 start_at
+    create:  b => request(API.activities, { method: 'POST', body: b }),
+    detail:  id => request(API.activity(id), { silent: true }),
+    // 编辑：把读到的 version 原样回传，不一致会返回 1012 防并发覆盖
+    update:  (id, b) => request(API.activity(id), { method: 'PUT', body: b }),
+    // 发布 / 下架：v1.6 专用路由，POST 无 body；后台没有删除路由
+    publish: id => request(API.publish(id), { method: 'POST' }),
+    offline: id => request(API.offline(id), { method: 'POST' }),
+    stats:   id => request(API.activityStats(id), { silent: true }),
     signups: (id, q) => request(API.signups(id), { query: q, silent: true })
   },
   signups: {
@@ -331,6 +387,8 @@ const Api = {
 
   users: {
     list:   q => request(API.users, { query: q, silent: true }),
+    detail: id => request(API.user(id), { silent: true }),                 // -> {user, signups}
+    signups:(id, q) => request(API.userSignups(id), { query: q, silent: true }),
     // 状态为字符串枚举 active / disabled；禁用时必传 reason
     toggle: (id, status, reason) => {
       const body = { status };
@@ -338,15 +396,22 @@ const Api = {
       return request(API.userStatus(id), { method: 'PATCH', body });
     },
     admins: q => request(API.admins, { query: q, silent: true }),
-    addAdmin: a => request(API.admins, { method: 'POST', body: a })
+    addAdmin: a => request(API.admins, { method: 'POST', body: a }),
+    updateAdmin: (id, a) => request(API.admin(id), { method: 'PUT', body: a }),
+    resetAdminPwd: (id, password) => request(API.resetAdminPwd(id), { method: 'POST', body: { password } })
   },
 
   analytics: {
-    // 日期区间统一用 { from, to }；不传则服务端默认近 14 天
+    // 日期区间统一用 { from, to }（YYYY-MM-DD）；不传则服务端默认近 14 天
+    overview: q => request(API.overview, { query: q, silent: true }),
     moduleHot: q => request(API.moduleHot, { query: q, silent: true }),
-    trend:     q => request(API.trend, { query: q, silent: true }),
-    funnel:    q => request(API.funnel, { query: q, silent: true }),
-    // AI 解读返回 { insight }，这里读 data.insight
+    trend:     q => request(API.trend, { query: q, silent: true }),       // list[].day
+    funnel:    q => request(API.funnel, { query: q, silent: true }),       // steps[].sessions
+    channels:  q => request(API.channels, { query: q, silent: true }),
+    summary:   q => request(API.summary, { query: q, silent: true }),
+    // 返回 {insight}；无记录时 insight 为 null（且无 range）
+    insightsLatest: () => request(API.insightsLatest, { silent: true }),
+    // AI 解读：from/to/question 放 POST body（不是 query）；读 data.insight
     interpret: async q => {
       const data = await request(API.interpret, { method: 'POST', body: q || {} });
       return data && data.insight;
@@ -354,21 +419,31 @@ const Api = {
   }
 };
 
-/* ---------- 权限判断（角色来自登录时保存的 data.admin.role） ----------
- * 以 D 服务端 264b515 auth.js 为准：
- *   super_admin: 含 activity:export / analytics:read / analytics:interpret / admin:*
- *   operator:    仅 activity:export_masked / analytics:read / user:* / activity:*
- * 即含手机号 CSV 导出与 AI 解读均仅 super_admin 可用；operator 调解读接口返回 403。
- * 前端权限必须先要求存在有效会话，再判角色，避免未登录或清空会话后误判为有权限。
+/* ---------- 权限判断（v1.6：后端按权限点鉴权，前端优先读 permissions） ----------
+ * 登录时把 data.admin.permissions 一并存入会话。判断时先看权限点数组是否非空：
+ *   - 有权限点：按权限点判断（与后端一致，最准）
+ *   - 无权限点（兼容旧后端/演示数据）：回退到角色判断
+ * 权限点对应关系（D auth.js）：
+ *   super_admin: activity:export / analytics:interpret / admin:* / 全部
+ *   operator:    activity:export_masked / analytics:read / user:* / activity:*
+ * 必须先要求存在有效会话，避免未登录或清空会话后误判为有权限。
  */
 const Perm = {
   hasSession: () => Boolean(Token.get()),
   role:   () => Token.getRole() || 'operator',
+  perms:  () => Token.getPermissions(),
   setRole: r => Token.setRole(r),
-  canExportPhone:  () => Perm.hasSession() && Perm.role() === 'super_admin',
-  canManageAdmins: () => Perm.hasSession() && Perm.role() === 'super_admin',
-  // AI 解读仅 super_admin 可用（operator 调接口会 403）
-  canInterpret: () => Perm.hasSession() && Perm.role() === 'super_admin'
+  // 有权限点按权限点判，否则回退角色
+  allows(point) {
+    const list = Perm.perms();
+    if (list.length) return list.indexOf(point) !== -1;
+    return Perm.role() === 'super_admin';
+  },
+  canExportPhone:  () => Perm.hasSession() && Perm.allows('activity:export'),
+  canExportMasked: () => Perm.hasSession() && (Perm.allows('activity:export') || Perm.allows('activity:export_masked')),
+  canManageAdmins: () => Perm.hasSession() && Perm.allows('admin:write'),
+  // AI 解读仅 super_admin / 有 analytics:interpret 权限点者可用（operator 调接口会 403）
+  canInterpret: () => Perm.hasSession() && Perm.allows('analytics:interpret')
 };
 
 /* ---------- 图片 URL：后端存相对地址，展示时拼 baseURL ---------- */
