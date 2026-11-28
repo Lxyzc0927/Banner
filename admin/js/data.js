@@ -14,6 +14,7 @@ const DB = {
     name: `摩托车型 ${String(i + 1).padStart(2, '0')}`,
     price: 19800 + i * 1300,
     cc: [150, 250, 300, 400, 500][i % 5],
+    cover: '',
     status: i % 4 === 0 ? '下架' : '上架'
   })),
   activities: [

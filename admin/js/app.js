@@ -252,8 +252,9 @@ function closeModal() {
 function previewImage(input) {
   const f = input.files && input.files[0];
   if (!f) return;
-  if (!/^image\//.test(f.type)) { toast('请选择图片文件'); input.value = ''; return; }
-  if (f.size > 2 * 1024 * 1024) { toast('图片不能超过 2MB'); input.value = ''; return; }
+  // API.md v1.7：上传仅 jpg/png/webp，单张 ≤ 5MB
+  if (!/^image\/(jpeg|png|webp)$/.test(f.type)) { toast('仅支持 jpg / png / webp 图片'); input.value = ''; return; }
+  if (f.size > 5 * 1024 * 1024) { toast('图片不能超过 5MB'); input.value = ''; return; }
   pendingFile = f;                       // 真实模式保存时用它上传；取消/关闭会清空
   const session = modalSession;          // 锁定发起读取的弹窗会话
   const seq = ++imageReadSeq;            // 本次读取的唯一序号；后一次选图会让前一次作废
@@ -286,8 +287,8 @@ function openBannerModal(id = null) {
   const b = id ? DB.banners.find(x => x.id === id) : { title: '', image: '', link: '', sort: nextSort(DB.banners) };
   openModal(`<h3>${id ? '编辑' : '新增'} Banner</h3>
     <div class="form-row"><label>标题 *</label><input id="f-title" value="${esc(b.title)}"><div class="err" id="e-title"></div></div>
-    <div class="form-row"><label>图片（选填，本地预览；接入上传接口后持久化）</label>
-      <input type="file" id="f-file" accept="image/*" onchange="previewImage(this)">
+    <div class="form-row"><label>图片 *（真实联调必填；jpg/png/webp ≤5MB）</label>
+      <input type="file" id="f-file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onchange="previewImage(this)">
       <img id="f-preview" src="${esc(b.image || '')}" alt="预览" style="display:${b.image ? 'block' : 'none'};max-width:100%;max-height:120px;margin-top:8px;border-radius:6px"></div>
     <div class="form-row"><label>跳转链接</label><input id="f-link" value="${esc(b.link)}"></div>
     <div class="form-row"><label>排序（正整数）</label><input type="number" step="1" id="f-sort" value="${b.sort}"><div class="err" id="e-sort"></div></div>
@@ -325,17 +326,22 @@ async function saveBanner() {
 
 function openBikeModal(id = null) {
   state.editId = id;
-  const b = id ? DB.bikes.find(x => x.id === id) : { name: '', price: '', cc: 150, category: '' };
+  pendingImage = null; pendingFile = null; imageReading = false;   // 防止上一个弹窗的图片串到车型
+  const b = id ? DB.bikes.find(x => x.id === id) : { name: '', price: '', cc: 150, category: '', cover: '' };
   // 类别为自由文本（契约里是原文，如“巡航”），用 datalist 给出已有类别作提示，不限制输入
   const known = [...new Set(DB.bikes.map(x => x.category).filter(Boolean))];
   openModal(`<h3>${id ? '编辑' : '新增'}车型</h3>
     <div class="form-row"><label>车型名称 *</label><input id="f-name" value="${esc(b.name)}"><div class="err" id="e-name"></div></div>
     <div class="form-row"><label>类别 *（如 巡航）</label><input id="f-category" list="category-list" value="${esc(b.category || '')}" placeholder="巡航/街车/跑车…"><datalist id="category-list">${known.map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist><div class="err" id="e-category"></div></div>
+    <div class="form-row"><label>封面图片 *（真实联调必填）</label>
+      <input type="file" id="f-file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" onchange="previewImage(this)">
+      <img id="f-preview" src="${esc(b.cover || '')}" alt="封面预览" style="display:${b.cover ? 'block' : 'none'};max-width:100%;max-height:120px;margin-top:8px;border-radius:6px"></div>
     <div class="form-row"><label>价格（元）*</label><input type="number" id="f-price" value="${b.price}"><div class="err" id="e-price"></div></div>
     <div class="form-row"><label>排量</label><select id="f-cc">${[150,250,300,400,500].map(v => `<option ${v == b.cc ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-    <div class="modal-actions"><button onclick="closeModal()">取消</button><button class="primary" onclick="saveBike()">保存</button></div>`);
+    <div class="modal-actions"><button onclick="closeModal()">取消</button><button class="primary" id="btn-save" onclick="saveBike()">保存</button></div>`);
 }
 async function saveBike() {
+  if (imageReading) { toast('图片还在读取中，请稍候'); return; }
   clearErrors();
   const name = q('#f-name').value.trim(), price = q('#f-price').value;
   const category = q('#f-category').value.trim();
@@ -345,9 +351,23 @@ async function saveBike() {
   if (!price || Number(price) <= 0) { q('#e-price').textContent = '价格必须大于 0'; ok = false; }
   if (!ok) return;
   const data = { name, category, price: Number(price), cc: Number(q('#f-cc').value) };
-  if (!await Bridge.mutate('bike.save', { ...data, editId: state.editId })) return;
-  if (state.editId) Object.assign(DB.bikes.find(x => x.id === state.editId), data);
-  else DB.bikes.unshift({ id: nextId(DB.bikes), ...data, status: '上架' });
+  const real = Bridge.isReal();
+  const existing = state.editId ? DB.bikes.find(x => x.id === state.editId) : null;
+  // API.md v1.7：车型 cover 也要先上传换 URL，不能只做本地预览
+  if (real && !pendingFile && !(existing && existing.cover)) { toast('请上传封面图片（jpg/png/webp，≤5MB）'); return; }
+  const payload = { ...data, editId: state.editId, coverFile: pendingFile, coverUrl: existing ? existing.cover : '' };
+  if (!await Bridge.mutate('bike.save', payload)) return;
+  if (state.editId) {
+    const b = DB.bikes.find(x => x.id === state.editId);
+    Object.assign(b, data);
+    if (real && payload.savedCoverUrl) b.cover = payload.savedCoverUrl;
+    else if (!real && pendingImage) b.cover = pendingImage;
+  } else {
+    DB.bikes.unshift({
+      id: nextId(DB.bikes), ...data, status: '上架',
+      cover: real ? (payload.savedCoverUrl || '') : (pendingImage || '')
+    });
+  }
   closeModal(); toast('保存成功'); refreshList();
 }
 

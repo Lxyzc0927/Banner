@@ -11,6 +11,8 @@
  *   - 带 base 参数进入真实模式并记到 localStorage；切换到不同地址时
  *     会先清空登录态并弹确认，需重新登录；?real=0 回演示模式。
  *   - 真实模式首次打开会弹登录框，输入 D 的演示账号即可。
+ *   - API.md v1.7：Banner/车型图片必须先 POST /api/upload，拿到 url
+ *     再写进 create/update 请求体，不能只做本地预览就提交。
  *
  * 演示模式：所有 mutate() 直接返回 true，写操作仍走 app.js 的本地 DB，
  *           原有校验/分页/空状态/竞态防护逻辑不变。
@@ -197,6 +199,19 @@ const Bridge = (function () {
             name: payload.name, category: payload.category, cc: payload.cc,
             price: Adapt.yuanToFen(payload.price)   // 表单元 -> 接口分
           };
+          // API.md v1.7：车型 cover 与 Banner image 一样，必须先上传换相对 URL 再写入。
+          // 编辑未选新图时沿用原 URL；演示态的 dataURL 绝不回传给后端。
+          if (payload.coverFile) {
+            const up = await Api.upload(payload.coverFile);   // -> {url}
+            const url = up && up.url;
+            if (!url) throw new Error('上传未返回图片地址');
+            body.cover = url;
+            payload.savedCoverUrl = url;                      // 写回给页面更新本地 DB
+          } else if (payload.coverUrl) {
+            body.cover = payload.coverUrl;
+            payload.savedCoverUrl = payload.coverUrl;
+          }
+          if (!body.cover) throw new Error('封面图片必填');
           if (payload.editId) await Api.bikes.update(payload.editId, body);
           else await Api.bikes.create(body);
           break;
