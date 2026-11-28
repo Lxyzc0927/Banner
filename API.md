@@ -96,7 +96,7 @@
 - 响应信封字段**固定为 `code / message / data`**，前端不得读 `msg`
 - **接口 JSON 字段一律驼峰**（`startAt`、`signupStartAt`、`avatarUrl`），数据库列才是下划线（`start_at`）——前端不要照搬建表字段名
 - 车型分类字段统一为 `category`（旧名 `series` 作废）；车型详情的收藏标记为 `favorited`（旧名 `isFavorited` 作废）
-- 价格字段固定为 `price`，**响应单位为分**，前端展示时除以 100；**车型列表查询参数 `minPrice`/`maxPrice` 单位为元**（与小程序一致，含边界，`0` 为有效值，不传或空串表示不限）
+- 价格字段固定为 `price`，**响应单位为分**，前端展示时除以 100；**车型列表查询参数 `minPrice`/`maxPrice` 单位为元**（与小程序一致，含边界，`0` 为有效值，不传或空串表示不限）。**&#8203;接口保留用分，小程序统一换算展示（先除以 100 再做千位分隔），并同步调整 mock 数据为分**
 - 客服接口请求**固定为 `messages` 数组**（多轮上下文），兼容单条 `question`；响应固定含 `reply`（与 `answer` 同值）
 - 接口路径以本文档为唯一标准，已有代码路径不一致的一方改代码
 
@@ -111,7 +111,7 @@
 - **用户状态**：`active` / `disabled` 字符串；禁用/启用走 `PATCH` 并附 `reason`（禁用必填）；被禁用用户登录返回 1008
 - **活动模块**：status 枚举 `draft（草稿）/ published（已发布）/ offline（已下架）`；返回还带 `statusLabel`（中文）与 `phase`（`draft/offline/upcoming/ongoing/ended`，前端直接用 phase 判断"进行中/已结束"）、`signupOpen`（当前能否报名）、`remaining`（剩余名额）
 - **报名状态**：`confirmed（已报名）/ cancelled（已取消）`；取消后名额释放、可重新报名
-- **图片存储**：数据库存相对 URL（如 `/uploads/2026/11/xxx.jpg`），前端展示时拼 baseURL
+- **图片存储**：数据库存相对 URL（如 `/uploads/2026/11/xxx.jpg`），**小程序统一转换接口返回的相对图片路径（拼 baseURL）展示，并保留绝对 URL 直接使用**
 - **上传限制**（任务3 实现）：仅 jpg / png / webp，单张 ≤ 5MB，超限返回 400
 
 ## 二、数据表（数据库为 SQLite；每表必有主键 id 与 created_at）
