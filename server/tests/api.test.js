@@ -179,6 +179,7 @@ describe('基础与后台账号', () => {
     assert.equal(health.body.data.status, 'ok');
     const meta = await api('/api/meta');
     assert.equal(meta.body.code, 0);
+    assert.equal(meta.body.data.version, require('../../package.json').version);
     assert.ok(meta.body.data.modules.includes('activities'));
   });
 
@@ -831,7 +832,7 @@ describe('审计与错误处理', () => {
   });
 });
 
-describe('v1.7 内容初始化、上传与展示', () => {
+describe('内容初始化、上传与展示', () => {
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRX8AAAAASUVORK5CYII=', 'base64');
 
   function upload(data, type, token = operatorToken) {
@@ -934,7 +935,7 @@ function loadPage(file, context) {
   return page;
 }
 
-describe('v1.7 联调回归', () => {
+describe('小程序与后台联调回归', () => {
   test('小程序从我的报名取消下架活动，并在详情页重载后反映取消结果', async () => {
     const activityId = insertActivity({ title: '小程序取消报名复验' });
     const login = await loginUserWithPhone('mock:cancel-ui', '13777777721');

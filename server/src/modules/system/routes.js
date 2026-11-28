@@ -2,6 +2,7 @@
 
 const { config } = require('../../config');
 const { getMeta } = require('../../db');
+const { version } = require('../../../../package.json');
 
 function register(router) {
   router.get('/api/health', (ctx) => {
@@ -20,7 +21,7 @@ function register(router) {
   router.get('/api/meta', (ctx) => {
     ctx.ok({
       name: 'XX 摩托销售管理系统 · 活动与分析服务',
-      version: '1.0.0',
+      version,
       apiPrefix: '/api',
       responseEnvelope: { code: 0, message: 'ok', data: null },
       errorCodes: {
