@@ -26,6 +26,7 @@ let server;
 let baseUrl;
 let superToken;
 let operatorToken;
+let uploadDir;
 
 function iso(offsetMs) {
   return new Date(Date.now() + offsetMs).toISOString();
@@ -138,7 +139,8 @@ before(async () => {
   insertUser(11, { phone: '13600000011', status: 'disabled' });
   insertUser(12, { phone: null });
 
-  const app = createApp({ db });
+  uploadDir = mkdtempSync(path.join(tmpdir(), 'banner-upload-test-'));
+  const app = createApp({ db, uploadDir });
   server = http.createServer((req, res) => app.handle(req, res));
   server.listen(0, '127.0.0.1');
   await once(server, 'listening');
@@ -164,6 +166,7 @@ after(async () => {
     await once(server, 'close');
   }
   if (db) db.close();
+  if (uploadDir) rmSync(uploadDir, { recursive: true, force: true });
 });
 
 describe('基础与后台账号', () => {
@@ -809,5 +812,90 @@ describe('审计与错误处理', () => {
     assert.equal(response.status, 400);
     const body = await response.json();
     assert.equal(body.code, 400);
+  });
+});
+
+describe('v1.7 内容初始化、上传与展示', () => {
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRX8AAAAASUVORK5CYII=', 'base64');
+
+  function upload(data, type, token = operatorToken) {
+    const body = new FormData();
+    body.append('file', new Blob([data], { type }), 'test.png');
+    return fetch(`${baseUrl}/api/upload`, { method: 'POST', headers: token ? { Authorization: `Bearer ${token}` } : {}, body });
+  }
+
+  test('空库自动创建六张内容表，首页接口可以正常读取', async () => {
+    const names = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all().map(({ name }) => name);
+    for (const name of ['banner', 'news', 'bike', 'bike_image', 'favorite', 'chat_log']) assert.ok(names.includes(name), name);
+    const home = await api('/api/home');
+    assert.equal(home.status, 200);
+    assert.deepEqual(home.body.data, { banners: [], news: [], hotBikes: [] });
+  });
+
+  test('上传图片后可读取同一文件，拒绝未登录、格式错误及超限请求', async () => {
+    const response = await upload(png, 'image/png');
+    assert.equal(response.status, 200);
+    const { data: { url } } = await response.json();
+    assert.match(url, /^\/uploads\/\d{4}\/\d{2}\/[0-9a-f-]+\.png$/);
+    const file = await fetch(`${baseUrl}${url}`);
+    assert.equal(file.status, 200);
+    assert.equal(file.headers.get('content-type'), 'image/png');
+    assert.deepEqual(Buffer.from(await file.arrayBuffer()), png);
+    const head = await fetch(`${baseUrl}${url}`, { method: 'HEAD' });
+    assert.equal(head.status, 200);
+    assert.equal(head.headers.get('content-length'), String(png.length));
+    assert.equal((await upload(png, 'image/png', null)).status, 401);
+    const user = await loginUser('test_u1');
+    assert.equal(user.body.code, 0);
+    assert.equal((await upload(png, 'image/png', user.body.data.token)).status, 401);
+    assert.equal((await upload(Buffer.from('not a PNG'), 'image/png')).status, 400);
+    for (const bytes of [5 * 1024 * 1024 + 1, 6 * 1024 * 1024]) {
+      const tooLarge = await upload(Buffer.alloc(bytes), 'image/png');
+      assert.equal(tooLarge.status, 400);
+      assert.equal((await tooLarge.json()).code, 400);
+    }
+  });
+
+  test('Banner 必填图片、编辑可保留原图，车型支持无封面和后续换图', async () => {
+    const request = (route, method, body) => api(route, { method, body, token: operatorToken });
+    const response = await upload(png, 'image/png');
+    const { data: { url } } = await response.json();
+    const invalid = await request('/api/admin/banners', 'POST', { title: '缺图' });
+    assert.equal(invalid.status, 400);
+    const banner = await request('/api/admin/banners', 'POST', { title: '首页推荐', image: url, sort: 2 });
+    assert.equal(banner.body.code, 0);
+    const bannerId = banner.body.data.id;
+    const created = await request('/api/admin/bikes', 'POST', { name: '测试车型', category: '巡航', cc: 250, price: 199900 });
+    assert.equal(created.body.code, 0);
+    const bikeId = created.body.data.id;
+    const bannerUpdate = await request(`/api/admin/banners/${bannerId}`, 'PUT', { title: '改名', linkType: 'bike', linkUrl: bikeId });
+    assert.equal(bannerUpdate.body.code, 0);
+    const detailPath = `/api/bikes/${bikeId}`;
+    assert.equal((await api(detailPath)).body.data.cover, null);
+    const update = await request(`/api/admin/bikes/${bikeId}`, 'PUT', { cover: url, images: [url], desc: '描述', power: 15 });
+    assert.equal(update.body.code, 0);
+    const detail = (await api(detailPath)).body.data;
+    assert.equal(detail.cover, url);
+    assert.deepEqual(detail.images, [url]);
+    assert.equal(detail.desc, '描述');
+    assert.equal(detail.power, 15);
+    const home = (await api('/api/home')).body.data;
+    assert.equal(home.banners[0].image, url);
+    assert.equal(home.banners[0].link, `/bike/${bikeId}`);
+    assert.equal(home.hotBikes[0].price, 199900);
+    assert.equal((await api('/api/bikes?cc=0&minPrice=1999&maxPrice=1999')).body.data.total, 1);
+    assert.equal((await api('/api/bikes?minPrice=1999.01')).body.data.total, 0);
+    assert.equal((await api('/api/bikes?minPrice=-1')).status, 400);
+    const { data: { token } } = (await loginUser('test_u1')).body;
+    const favoritePath = `/api/bikes/${bikeId}/favorite`;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      assert.equal((await api(favoritePath, { method: 'POST', token })).body.data.favorited, true);
+    }
+    db.prepare('UPDATE favorite SET id = ? WHERE bike_id = ?').run(bikeId + 1000, bikeId);
+    const favorites = (await api('/api/favorites', { token })).body.data;
+    assert.equal(favorites.total, 1);
+    assert.equal(favorites.list[0].id, bikeId);
+    assert.equal((await api(detailPath, { token })).body.data.favorited, true);
+    assert.equal((await api(favoritePath, { method: 'DELETE', token })).body.data.favorited, false);
   });
 });

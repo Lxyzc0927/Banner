@@ -37,7 +37,7 @@ function register(router) {
         1011: '手机号已被绑定',
         1012: '并发更新冲突',
       },
-      modules: ['auth', 'users', 'admins', 'activities', 'analytics', 'track'],
+      modules: ctx.modules,
     });
   });
 }
