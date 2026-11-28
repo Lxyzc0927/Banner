@@ -268,8 +268,7 @@ function seed() {
 
   console.log('✔ 初始化完成');
   console.log(`  数据库: ${config.dbPath}`);
-  console.log(`  后台账号: ${config.seed.adminUsername} / ${config.seed.adminPassword}（超级管理员）`);
-  console.log(`            ${config.seed.operatorUsername} / ${config.seed.operatorPassword}（运营管理员）`);
+  console.log(`  后台账号: ${config.seed.adminUsername}（超级管理员）、${config.seed.operatorUsername}（运营管理员）`);
   console.log(`  数据量: 管理员 ${counts.admins} · C 端用户 ${counts.users} · 活动 ${counts.activities} · 报名 ${counts.signups} · 行为事件 ${counts.events}`);
   if (counts.events === 0) console.log('  下一步: npm run mock -- --clear  生成模拟访问数据');
   db.close();

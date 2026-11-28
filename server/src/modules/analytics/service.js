@@ -195,7 +195,7 @@ function funnel(db, range, { activityId = null } = {}) {
       SELECT s4.session_id, MIN(e.created_at) AS t5, s4.actor
       FROM s4 JOIN visit_event e
         ON e.session_id = s4.session_id AND e.created_at >= s4.t4
-      WHERE e.action = 'signup_success'
+      WHERE e.action = 'signup_success' AND e.event_id NOT GLOB 'evt_track_*'
         ${activityFilter5}
       GROUP BY s4.session_id
     )
@@ -271,6 +271,7 @@ function channelBreakdown(db, range) {
               SUM(CASE WHEN action = 'signup_success' THEN 1 ELSE 0 END) AS signups
        FROM visit_event
        WHERE created_at >= ? AND created_at <= ?
+         AND NOT (action = 'signup_success' AND event_id GLOB 'evt_track_*')
        GROUP BY channel
        ORDER BY sessions DESC`,
     )

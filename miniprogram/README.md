@@ -154,7 +154,7 @@ flowchart LR
 | --- | --- | --- |
 | `view` | `module`：`home` / `bike` / `bike_detail` / `activity` / `activity_detail` / `mine` / `chat`；详情页另带 `bikeId` / `activityId` | 模块热度、访问趋势 |
 | `signup_click` | `activityId` | 转化漏斗：发起报名 |
-| `signup_success` | `activityId` | 转化漏斗：报名成功 |
+| `signup_success`（服务端记录） | 报名接口生成 | 转化漏斗：报名成功 |
 | `bike_sort` | `sort`：`default` / `price_asc` / `price_desc` | 车型列表排序方式的使用情况 |
 | `bike_price_filter` | `min`、`max`（元，空串表示不限） | 用户关心的价格区间分布 |
 | `bike_tag_filter` | `source`：`detail`（详情页点标签）/ `list`（列表标签面板）；`category`、`tier`、`tags` | 标签筛选的使用情况，以及从详情页标签跳转的次数 |

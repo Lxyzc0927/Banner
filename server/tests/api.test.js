@@ -9,6 +9,10 @@ const { test, describe, before, after } = require('node:test');
 const assert = require('node:assert/strict');
 const http = require('node:http');
 const { once } = require('node:events');
+const { spawnSync } = require('node:child_process');
+const { mkdtempSync, rmSync } = require('node:fs');
+const { tmpdir } = require('node:os');
+const path = require('node:path');
 
 const { openDatabase } = require('../src/db');
 const { createApp } = require('../src/app');
@@ -193,6 +197,57 @@ describe('基础与后台账号', () => {
       wechatMock: true,
     });
     assert.equal(local.errors.length, 0);
+  });
+
+  test('后台启动拒绝显式配置的示例密钥和旧库的演示密码', () => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'banner-bind-test-'));
+    const env = {
+      ...process.env,
+      HOST: '127.0.0.2', PORT: '0', DB_PATH: path.join(dir, 'app.db'),
+      SEED_ADMIN_PASSWORD: 'test-rotated-admin-password',
+      SEED_OPERATOR_PASSWORD: 'test-rotated-operator-password',
+    };
+    const start = (jwtSecret) => spawnSync(process.execPath, [require.resolve('../src/server')], {
+      env: { ...env, JWT_SECRET: jwtSecret }, encoding: 'utf8', timeout: 5000,
+    });
+    try {
+      const example = start('dev-only-change-me-please-32-chars');
+      assert.equal(example.status, 1);
+      assert.match(example.stderr, /JWT_SECRET/);
+
+      const oldDb = openDatabase(env.DB_PATH);
+      try {
+        const now = nowIso();
+        oldDb.prepare(`INSERT INTO admin_user(username, password_hash, display_name, role, created_at, updated_at)
+          VALUES (?, ?, ?, 'super_admin', ?, ?)`)
+          .run('legacy-admin', hashPassword('Admin@123456'), 'legacy-admin', now, now);
+      } finally {
+        oldDb.close();
+      }
+      const legacy = start(process.env.JWT_SECRET);
+      assert.equal(legacy.status, 1);
+      assert.match(legacy.stderr, /数据库中有启用的后台账号仍使用演示密码/);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test('种子脚本只显示账号名，不输出配置密码', (t) => {
+    const dir = mkdtempSync(path.join(tmpdir(), 'banner-seed-test-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const adminPassword = 'test-custom-admin-password';
+    const operatorPassword = 'test-custom-operator-password';
+    const result = spawnSync(process.execPath, [require.resolve('../src/scripts/seed')], {
+      env: { ...process.env, DB_PATH: path.join(dir, 'seed.db'), SEED_ADMIN_USERNAME: 'seed-admin',
+        SEED_OPERATOR_USERNAME: 'seed-operator', SEED_ADMIN_PASSWORD: adminPassword,
+        SEED_OPERATOR_PASSWORD: operatorPassword },
+      encoding: 'utf8', timeout: 5000,
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stdout, /seed-admin.*seed-operator/);
+    for (const password of [adminPassword, operatorPassword]) {
+      assert.ok(!(result.stdout + result.stderr).includes(password));
+    }
   });
 
   test('后台登录：错误密码返回 1001，正确密码返回 token', async () => {
@@ -675,6 +730,47 @@ describe('访问分析：模块热度、趋势、漏斗与 AI 解读', () => {
     const latest = await api('/api/admin/analytics/insights/latest', { token: superToken });
     assert.equal(latest.body.data.insight.source, 'fallback');
     assert.ok(latest.body.data.insight.summary.length > 10);
+  });
+
+  test('漏斗只统计服务端确认的报名，并关联匿名浏览和点击', async () => {
+    const activityId = insertActivity({ title: '真实报名转化测试' });
+    const user = await loginUserWithPhone('mock:conversion-user', '13999990111');
+    const token = user.body.data.token;
+    const channel = 'signup-regression';
+    let click;
+    for (const body of [
+      { event: 'view', module: 'home' },
+      { event: 'view', module: 'activity' },
+      { event: 'view', module: 'activity_detail', activityId },
+      { event: 'signup_click', activityId },
+    ]) {
+      const response = await api('/api/track', { method: 'POST', body: { ...body, channel } });
+      assert.equal(response.body.data.tracked, true);
+      click = response.body.data.eventId;
+    }
+
+    const ignored = await api('/api/track', {
+      method: 'POST', body: { event: 'signup_success', activityId, channel },
+    });
+    assert.deepEqual(ignored.body.data, { tracked: false });
+
+    // 模拟升级前已经入库的客户端成功事件，验证历史记录不会混入统计。
+    db.prepare(`INSERT INTO visit_event(event_id, visitor_id, session_id, module, action, page, target_id, channel, created_at)
+      SELECT 'evt_track_legacy_conversion', visitor_id, session_id, module, 'signup_success', page, target_id, channel, created_at
+      FROM visit_event WHERE event_id = ?`).run(click);
+    const getConversion = async () => {
+      const result = await api(`/api/admin/analytics/funnel?activityId=${activityId}`, { token: superToken });
+      return result.body.data.steps.at(-1).sessions;
+    };
+    assert.equal(await getConversion(), 0);
+
+    const signup = await api(`/api/activities/${activityId}/signup`, { method: 'POST', token, body: { channel } });
+    assert.equal(signup.status, 201);
+    const duplicate = await api(`/api/activities/${activityId}/signup`, { method: 'POST', token });
+    assert.equal(duplicate.body.code, 1004);
+    assert.equal(await getConversion(), 1);
+    const channels = await api('/api/admin/analytics/channels', { token: superToken });
+    assert.equal(channels.body.data.list.find((item) => item.channel === channel).signups, 1);
   });
 
   test('小程序埋点 /api/track 写入 visit_event', async () => {

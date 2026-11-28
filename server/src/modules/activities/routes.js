@@ -24,6 +24,7 @@ const {
 const { transaction } = require('../../db');
 const { audit } = require('../../audit');
 const { toCsv } = require('../../csv');
+const { recordEvent } = require('../track/events');
 
 const STATUSES = ['draft', 'published', 'offline'];
 const STATUS_LABELS = { draft: '草稿', published: '已发布', offline: '已下架' };
@@ -677,6 +678,10 @@ function register(router) {
              FROM activity a WHERE a.id = ?`,
           )
           .get(id);
+        // 报名与成功事件一起提交，任一步失败都不计为转化。
+        recordEvent(ctx, {
+          module: 'activity', action: 'signup_success', page: 'activity_detail', targetId: id,
+        }, { sessionId: body.sessionId, channel: body.channel }, `evt_signup_${signup.id}`);
         return { signup, activity: fresh };
       });
     } catch (error) {

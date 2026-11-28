@@ -821,7 +821,7 @@ Authorization: Bearer <token>
 | --- | --- | --- |
 | `view` | `module`：`home` / `bike` / `bike_detail` / `activity` / `activity_detail` / `mine` / `chat`；详情带 `bikeId` / `activityId` | `module` + `action=view` + `page` |
 | `signup_click` | `activityId` | `module=activity`、`page=activity_detail`、`action=signup_click` |
-| `signup_success` | `activityId` | 同上，`action=signup_success` |
+| `signup_success`（服务端记录） | 报名接口生成 | 与有效报名一起提交。`/api/track` 忽略此事件 |
 | `bike_sort` | `sort` | `module=bike`、`page=bike_list`、`action=bike_sort` |
 | `bike_price_filter` | `min` / `max` | `module=bike`、`page=bike_list` |
 | `bike_tag_filter` | `source` / `category` / `tier` / `tags` | `module=bike`、`page=bike_list` |

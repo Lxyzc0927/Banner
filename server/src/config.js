@@ -43,6 +43,9 @@ const dbPath = path.isAbsolute(process.env.DB_PATH || '')
   ? process.env.DB_PATH
   : path.resolve(serverDir, process.env.DB_PATH || 'data/app.db');
 
+const defaultJwtSecret = 'dev-only-change-me-please-32-chars';
+const jwtSecret = process.env.JWT_SECRET || defaultJwtSecret;
+
 const config = {
   rootDir: ROOT_DIR,
   serverDir,
@@ -52,7 +55,8 @@ const config = {
   host: process.env.HOST || '127.0.0.1',
   dbPath,
   jwt: {
-    secret: process.env.JWT_SECRET || 'dev-only-change-me-please-32-chars',
+    secret: jwtSecret,
+    isDefaultSecret: jwtSecret.trim() === defaultJwtSecret,
     userTtl: process.env.JWT_USER_TTL || '7d',
     adminTtl: process.env.JWT_ADMIN_TTL || '12h',
   },
@@ -84,9 +88,5 @@ const config = {
   },
   env: process.env.NODE_ENV || 'development',
 };
-
-if (!process.env.JWT_SECRET) {
-  config.jwt.isDefaultSecret = true;
-}
 
 module.exports = { config, loadEnvFile, ROOT_DIR, SERVER_DIR };

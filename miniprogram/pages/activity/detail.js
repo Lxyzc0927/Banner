@@ -79,7 +79,6 @@ Page({
 
     this.setData({ submitting: true })
     api.signup(this.id, { remark: this.data.form.remark.trim() }).then(res => {
-      track('signup_success', { activityId: this.id })
       this.setData({ sheet: false, 'form.remark': '' })
       wx.showToast({ title: '报名成功', icon: 'success' })
       return this.load().then(() => res)

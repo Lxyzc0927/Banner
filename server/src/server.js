@@ -2,11 +2,13 @@
 
 const { startServer } = require('./app');
 const { config } = require('./config');
-const { validateBindConfig } = require('./security');
+const { getDb } = require('./db');
+const { hasDefaultAdminPassword, validateBindConfig } = require('./security');
 
 const safety = validateBindConfig({
   host: config.host,
   defaultJwtSecret: config.jwt.isDefaultSecret,
+  jwtSecret: config.jwt.secret,
   adminPassword: config.seed.adminPassword,
   operatorPassword: config.seed.operatorPassword,
   wechatMock: config.wechat.mock,
@@ -21,7 +23,14 @@ for (const warning of safety.warnings) {
   console.warn(`  [安全提醒] ${warning}`);
 }
 
-const { server, db } = startServer();
+const db = getDb();
+if (!safety.loopback && hasDefaultAdminPassword(db)) {
+  db.close();
+  console.error('启动被拒绝：数据库中有启用的后台账号仍使用演示密码，请先在本机轮换密码。');
+  process.exit(1);
+}
+
+const { server } = startServer({ db });
 
 server.once('listening', () => {
   const address = server.address();
