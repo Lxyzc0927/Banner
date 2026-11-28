@@ -47,7 +47,13 @@ function setPage(page) {
   render();
 }
 
-function render() {
+/* 渲染序号：真实模式异步加载期间快速切页时，只让最后一次渲染落地 */
+let renderSeq = 0;
+async function render() {
+  const seq = ++renderSeq;
+  // 真实模式：先拉当前页数据写回 DB（演示模式 Bridge.load 直接返回）
+  await Bridge.load(state.page);
+  if (seq !== renderSeq) return;
   const map = { home: renderHome, bike: renderBike, activity: renderActivity, user: renderUser, analysis: renderAnalysis };
   map[state.page]();
 }
@@ -112,8 +118,12 @@ function homeList() {
 function renderHome() {
   paint(searchBar('搜索 Banner 标题…', `<button class="primary" onclick="openBannerModal()">+ 新增 Banner</button>`), homeList());
 }
-function toggleBanner(id) {
-  const b = DB.banners.find(x => x.id === id); b.status = b.status === '上架' ? '下架' : '上架';
+async function toggleBanner(id) {
+  const b = DB.banners.find(x => x.id === id);
+  const next = b.status === '上架' ? '下架' : '上架';
+  // 真实模式先调接口，失败则不动本地状态
+  if (!await Bridge.mutate('banner.toggle', { id, status: next })) return;
+  b.status = next;
   toast('状态已更新，小程序端刷新即可生效'); refreshList();
 }
 
@@ -157,15 +167,21 @@ function renderActivity() {
   paint(searchBar('搜索活动名称…', `<button class="primary" onclick="toast('活动发布表单：接入 POST /api/activities')">+ 发布活动</button>`), activityList());
 }
 /* 发布/下架/重新发布三个动作；"已结束"由时间决定，不提供人工操作 */
-function toggleActivity(id) {
+async function toggleActivity(id) {
   const a = DB.activities.find(x => x.id === id);
-  if (a.status === '未开始') { a.status = '进行中'; toast('活动已发布'); }
-  else if (a.status === '进行中') { a.status = '已下架'; toast('活动已下架'); }
-  else if (a.status === '已下架') { a.status = '进行中'; toast('活动已重新发布'); }
+  let next, msg, op;
+  if (a.status === '未开始') { next = '进行中'; msg = '活动已发布'; op = 'publish'; }
+  else if (a.status === '进行中') { next = '已下架'; msg = '活动已下架'; op = 'offline'; }
+  else if (a.status === '已下架') { next = '进行中'; msg = '活动已重新发布'; op = 'publish'; }
   else return;
-  refreshList();
+  if (!await Bridge.mutate('activity.toggle', { id, op })) return;
+  a.status = next;
+  toast(msg); refreshList();
 }
-function exportSignups(id) {
+async function exportSignups(id) {
+  // 真实模式：走 Bearer + Blob 下载 CSV（Bridge.mutate 内部已触发下载，返回 false 跳过演示 toast）
+  const done = await Bridge.mutate('export', { id, query: {} });
+  if (!done) return;
   const a = DB.activities.find(x => x.id === id);
   const names = DB.signups.filter(s => s.activity === a.name).map(s => s.name);
   toast('已导出名单（演示）：' + (names.length ? names.join('、') : '暂无报名记录'));
@@ -189,8 +205,11 @@ function userList() {
 function renderUser() {
   paint(searchBar('搜索 C 端用户…'), userList());
 }
-function toggleUser(id) {
-  const u = DB.users.find(x => x.id === id); u.status = u.status === '正常' ? '禁用' : '正常'; toast('用户状态已更新'); refreshList();
+async function toggleUser(id) {
+  const u = DB.users.find(x => x.id === id);
+  const next = u.status === '正常' ? '禁用' : '正常';
+  if (!await Bridge.mutate('user.toggle', { id, status: next === '正常' ? 'active' : 'disabled', reason: '后台管理操作' })) return;
+  u.status = next; toast('用户状态已更新'); refreshList();
 }
 
 /* 数据分析 */
@@ -266,7 +285,7 @@ function openBannerModal(id = null) {
     <div class="form-row"><label>排序（正整数）</label><input type="number" step="1" id="f-sort" value="${b.sort}"><div class="err" id="e-sort"></div></div>
     <div class="modal-actions"><button onclick="closeModal()">取消</button><button class="primary" id="btn-save" onclick="saveBanner()">保存</button></div>`);
 }
-function saveBanner() {
+async function saveBanner() {
   if (imageReading) { toast('图片还在读取中，请稍候'); return; }
   clearErrors();
   const title = q('#f-title').value.trim(), sortRaw = q('#f-sort').value, sortNum = Number(sortRaw);
@@ -275,6 +294,7 @@ function saveBanner() {
   if (!sortRaw || !Number.isInteger(sortNum) || sortNum < 1) { q('#e-sort').textContent = '排序必须为正整数'; ok = false; }
   if (!ok) return;
   const data = { title, link: q('#f-link').value.trim(), sort: sortNum };
+  if (!await Bridge.mutate('banner.save', { ...data, editId: state.editId })) return;
   if (state.editId) {
     const b = DB.banners.find(x => x.id === state.editId);
     Object.assign(b, data);
@@ -282,7 +302,7 @@ function saveBanner() {
   } else {
     DB.banners.push({ id: nextId(DB.banners), ...data, image: pendingImage || '', status: '上架' });
   }
-  closeModal(); toast('保存成功（演示数据）'); refreshList();
+  closeModal(); toast('保存成功'); refreshList();
 }
 
 function openBikeModal(id = null) {
@@ -294,7 +314,7 @@ function openBikeModal(id = null) {
     <div class="form-row"><label>排量</label><select id="f-cc">${[150,250,300,400,500].map(v => `<option ${v == b.cc ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
     <div class="modal-actions"><button onclick="closeModal()">取消</button><button class="primary" onclick="saveBike()">保存</button></div>`);
 }
-function saveBike() {
+async function saveBike() {
   clearErrors();
   const name = q('#f-name').value.trim(), price = q('#f-price').value;
   let ok = true;
@@ -302,20 +322,55 @@ function saveBike() {
   if (!price || Number(price) <= 0) { q('#e-price').textContent = '价格必须大于 0'; ok = false; }
   if (!ok) return;
   const data = { name, price: Number(price), cc: Number(q('#f-cc').value) };
+  if (!await Bridge.mutate('bike.save', { ...data, editId: state.editId })) return;
   if (state.editId) Object.assign(DB.bikes.find(x => x.id === state.editId), data);
   else DB.bikes.unshift({ id: nextId(DB.bikes), ...data, status: '上架' });
-  closeModal(); toast('保存成功（演示数据）'); refreshList();
+  closeModal(); toast('保存成功'); refreshList();
 }
 
 function confirmDelete(type, id) {
   openModal(`<h3>二次确认</h3><p style="color:#666">确定删除这条记录吗？删除后不可恢复。</p>
     <div class="modal-actions"><button onclick="closeModal()">取消</button><button class="danger" onclick="doDelete('${type}',${id})">确认删除</button></div>`);
 }
-function doDelete(type, id) {
+async function doDelete(type, id) {
   const key = { banner: 'banners', bike: 'bikes' }[type];
+  const action = type === 'banner' ? 'banner.delete' : 'bike.delete';
+  if (!await Bridge.mutate(action, { id })) return;
   const i = DB[key].findIndex(x => x.id === id); if (i > -1) DB[key].splice(i, 1);
-  closeModal(); toast('已删除（演示数据）'); refreshList();
+  closeModal(); toast('已删除'); refreshList();
 }
 
 document.querySelectorAll('.sidebar nav a').forEach(a => a.addEventListener('click', e => { e.preventDefault(); setPage(a.dataset.page); }));
-render();
+
+/* 启动：应用联调配置；真实模式先登录再渲染 */
+async function boot() {
+  Bridge.applyConfig();
+  updateModeBadge();
+  if (Bridge.isReal()) {
+    if (typeof Perm === 'undefined' || !Perm.hasSession()) {
+      const ok = await Bridge.showLogin();
+      if (!ok) { toast('未登录，接口请求可能返回 401'); }
+    }
+    await Bridge.loadAll();
+  }
+  render();
+}
+function updateModeBadge() {
+  const el = q('#mode-badge');
+  if (!el) return;
+  el.textContent = Bridge.isReal() ? '● 联调模式' : '● 演示模式';
+  el.style.color = Bridge.isReal() ? '#c0392b' : '#888';
+}
+async function toggleMode() {
+  if (Bridge.isReal()) {
+    Bridge.setReal(false);
+    toast('已切回演示模式，刷新页面生效');
+  } else {
+    const url = prompt('输入后端地址（留空用已保存地址），例如 http://192.168.1.10:3000', Bridge.baseURL);
+    if (url === null) return;
+    Bridge.setReal(true, url.trim() || undefined);
+    toast('已切到联调模式，刷新页面生效');
+  }
+  updateModeBadge();
+}
+boot();
