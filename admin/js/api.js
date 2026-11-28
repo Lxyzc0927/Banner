@@ -36,18 +36,21 @@
  * 复审修复（组长 39530d0 复审意见）：
  *   - [P3] 会话记录绑定「退出版本」，读取 token/角色时校验版本；
  *          即使另一页在校验通过后、写入前退出，迟到写入的会话也无法被读到
+ *
+ * 复审修复（组长 743412c 复审意见）：
+ *   - [P2] token/角色/归属版本合并为「单条会话记录」一次原子写入，消除分步写的中间态；
+ *          读取时校验归属版本，失效记录直接忽略；旧响应写入失败不再 clearAll，
+ *          避免把另一标签页刚写入的新会话一起删掉
  * ============================================================ */
 
 /* ---------- 全局配置：联调时只改这里 ---------- */
 const API_CONFIG = {
   USE_MOCK: true,                                  // 联调时改为 false
   baseURL: 'http://127.0.0.1:3000',                // C 发局域网 IP 后替换；末尾不要带 /
-  tokenKey: 'admin_token',                         // localStorage 中 token 的键名
-  roleKey: 'admin_role',                           // localStorage 中角色的键名（登录时保存）
+  sessionKey: 'admin_session',                     // 单条会话记录 {token, role, owner}，一次原子写入
   sessionVersionKey: 'admin_session_version',      // 会话版本号：区分同秒重登签发的相同 JWT
   loginAttemptKey: 'admin_login_attempt',          // 登录尝试标识：跨标签页共享，退出时换新使在途登录失效
   logoutVersionKey: 'admin_logout_version',        // 退出版本：只由退出递增，用于绑定会话记录
-  sessionOwnerKey: 'admin_session_owner',          // 会话记录绑定的退出版本，读取 token/角色时校验
   successCode: 0,                                  // code === 0 视为成功
   timeout: 10000
 };
@@ -81,12 +84,15 @@ const API = {
   mySignups:    '/api/users/me/signups'            // GET 我的报名
 };
 
-/* ---------- 会话存取：token、角色、会话版本一体管理 ----------
+/* ---------- 会话存取：单条会话记录 + 版本管理 ----------
  * 会话版本（session version）用来区分「同秒重新登录」：D 给同一账号同一秒会签发
  * 完全相同的 JWT，仅比较 token 无法识别这是两次不同的登录。每次成功登录 / 退出
- * 都会递增版本；请求发出时记录当时的版本，401 时只有版本仍匹配才清理会话，
- * 这样迟到的旧请求 401 就不会误清新会话。
- * 登录尝试标识同样存 localStorage，使跨标签页的退出也能让另一页在途登录作废。
+ * 都会递增版本；请求发出时记录当时的版本，401 时只有版本仍匹配才清理会话。
+ *
+ * token / 角色 / 归属版本合并为「一条记录」一次 setItem 写入，避免分步写造成中间态；
+ * 读取时校验 owner 是否等于当前退出版本，不等即视为失效记录、直接忽略。
+ * 关键：写入失败只丢弃本次写入，绝不 clearAll —— 否则旧响应会把另一标签页刚写好的
+ * 新会话一起删掉。
  */
 
 const Token = {
@@ -98,28 +104,34 @@ const Token = {
     localStorage.setItem(API_CONFIG.logoutVersionKey, String(v));
     return v;
   },
-  sessionValid() {
-    const owner = localStorage.getItem(API_CONFIG.sessionOwnerKey);
-    return owner !== null && Number(owner) === this.logoutVersion();
+  // 读取会话记录：解析失败或归属版本不符都返回 null（失效记录被忽略，不清理存储）
+  read() {
+    const raw = localStorage.getItem(API_CONFIG.sessionKey);
+    if (!raw) return null;
+    let rec;
+    try { rec = JSON.parse(raw); } catch (e) { return null; }
+    if (!rec || typeof rec !== 'object' || rec.owner !== this.logoutVersion()) return null;
+    return rec;
   },
-  get()     { return this.sessionValid() ? (localStorage.getItem(API_CONFIG.tokenKey) || '') : ''; },
-  getRole() { return this.sessionValid() ? (localStorage.getItem(API_CONFIG.roleKey) || '') : ''; },
-  set(t)     { localStorage.setItem(API_CONFIG.tokenKey, t); },
-  clear()    { localStorage.removeItem(API_CONFIG.tokenKey); },
-  setRole(r) { if (r) localStorage.setItem(API_CONFIG.roleKey, r); },
-  // 写入会话时每写一步都复查退出版本；发现期间发生退出就回滚并抛错，
-  // 这样迟到的登录响应即使抢在校验后写入，也不会留下可读的会话。
-  setSession(t, r, exitVersion) {
-    const stillValid = () => exitVersion === this.logoutVersion();
-    if (!stillValid()) throw new Error('SESSION_INVALIDATED');
-    localStorage.setItem(API_CONFIG.tokenKey, t);
-    if (!stillValid()) { this.clearAll(); throw new Error('SESSION_INVALIDATED'); }
-    if (r) {
-      localStorage.setItem(API_CONFIG.roleKey, r);
-      if (!stillValid()) { this.clearAll(); throw new Error('SESSION_INVALIDATED'); }
+  get()     { const rec = this.read(); return rec ? (rec.token || '') : ''; },
+  getRole() { const rec = this.read(); return rec ? (rec.role || '') : ''; },
+  setRole(r) {
+    const rec = this.read();
+    if (rec && r) {
+      rec.role = r;
+      localStorage.setItem(API_CONFIG.sessionKey, JSON.stringify(rec));
     }
-    localStorage.setItem(API_CONFIG.sessionOwnerKey, String(exitVersion));
-    if (!stillValid()) { this.clearAll(); throw new Error('SESSION_INVALIDATED'); }
+  },
+  // 单条原子写入：一次 setItem 写完 token/角色/归属版本，没有分步写的中间态。
+  // 版本不符时只抛错丢弃本次写入，绝不清 localStorage —— 不能误删别页的新会话。
+  setSession(t, r, exitVersion) {
+    if (exitVersion !== this.logoutVersion()) throw new Error('SESSION_INVALIDATED');
+    localStorage.setItem(API_CONFIG.sessionKey, JSON.stringify({
+      token: t, role: r || '', owner: exitVersion
+    }));
+    // 写后复核：若写入瞬间发生了退出，仅报错让调用方知道本次登录未落地；
+    // 失效记录留在存储里但读取时会被忽略，不去 clearAll 误伤新会话。
+    if (exitVersion !== this.logoutVersion()) throw new Error('SESSION_INVALIDATED');
   },
   // 登录尝试标识：存 localStorage，多个标签页共享。每次登录/退出都换新标识，
   // 登录响应写入会话前校验标识仍是自己发起时的值；另一标签页退出也能作废旧尝试。
@@ -132,12 +144,8 @@ const Token = {
   // 会话版本：localStorage 存字符串，读取时转数字
   version()  { return Number(localStorage.getItem(API_CONFIG.sessionVersionKey) || 0); },
   bump()     { const v = this.version() + 1; localStorage.setItem(API_CONFIG.sessionVersionKey, String(v)); return v; },
-  // 会话失效时 token、角色与归属标记一起清理（不改变版本，版本由调用方按语义递增）
-  clearAll() {
-    localStorage.removeItem(API_CONFIG.tokenKey);
-    localStorage.removeItem(API_CONFIG.roleKey);
-    localStorage.removeItem(API_CONFIG.sessionOwnerKey);
-  }
+  // 会话失效时删除这条记录（不改变版本，版本由调用方按语义递增）
+  clearAll() { localStorage.removeItem(API_CONFIG.sessionKey); }
 };
 
 /* ---------- 统一请求封装 ----------
