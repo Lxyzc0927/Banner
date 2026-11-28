@@ -1,6 +1,7 @@
 /* 管理后台骨架：所有交互演示版，接口就绪后把 DB 换成后端数据 */
 const state = { page: 'home', keyword: '', pageNo: 1, pageSize: 8, editId: null };
-let pendingImage = null;
+let pendingImage = null;   // 本地预览用的 dataURL（演示模式写回 DB 用）
+let pendingFile = null;    // 原始 File：真实模式下先上传到 /api/upload 换 URL 再写入 Banner
 /* 弹窗会话号：每次打开弹窗 +1，用于作废旧弹窗未完成的异步读取，防止图片串到另一条记录 */
 let modalSession = 0;
 /* 当前弹窗是否正在读取图片，读取期间禁用保存，避免丢图 */
@@ -144,19 +145,28 @@ function renderBike() {
 }
 
 /* 活动管理 */
+/* 按钮动作按后端原始 status 判断（draft/published/offline），展示文案仍按 phase 计算。
+ * 关键点：phase=upcoming 的已发布活动展示为"未开始"，但它已经是 published，
+ * 必须显示"下架"而不是"发布"，否则重复调 publish 会被后端以 1009 拒绝。 */
+function activityAction(a) {
+  // 已结束由时间决定，任何 raw status 都不提供人工操作
+  if (a.phase === 'ended' || a.status === '已结束') return null;
+  const raw = a.rawStatus || (a.status === '未开始' ? 'draft' : a.status === '进行中' ? 'published' : a.status === '已下架' ? 'offline' : 'ended');
+  if (raw === 'draft')   return { op: 'publish', label: '发布', next: '进行中', nextRaw: 'published', msg: '活动已发布' };
+  if (raw === 'published') return { op: 'offline', label: '下架', next: '已下架', nextRaw: 'offline', msg: '活动已下架' };
+  if (raw === 'offline') return { op: 'publish', label: '重新发布', next: '进行中', nextRaw: 'published', msg: '活动已重新发布' };
+  return null;   // ended 由时间决定，不提供人工操作
+}
 function activityList() {
   const kw = state.keyword.toLowerCase();
   const list = DB.activities.filter(a => !kw || a.name.toLowerCase().includes(kw));
   clampPage(list.length);
   const rows = pageSlice(list).map(a => {
     const tagClass = a.status === '进行中' ? 'tag-on' : (a.status === '未开始' || a.status === '已下架') ? 'tag-warn' : 'tag-off';
-    const op = a.status === '未开始'
-      ? `<button class="small" onclick="toggleActivity(${a.id})">发布</button>`
-      : a.status === '进行中'
-        ? `<button class="small" onclick="toggleActivity(${a.id})">下架</button>`
-        : a.status === '已下架'
-          ? `<button class="small" onclick="toggleActivity(${a.id})">重新发布</button>`
-          : `<span style="color:#aaa">—</span>`;
+    const act = activityAction(a);
+    const op = act
+      ? `<button class="small" onclick="toggleActivity(${a.id})">${act.label}</button>`
+      : `<span style="color:#aaa">—</span>`;
     return `<tr><td>${a.id}</td><td>${esc(a.name)}</td><td>${a.date}</td><td>${a.signup}/${a.quota}</td>
       <td><span class="tag ${tagClass}">${a.status}</span></td>
       <td>${op}<button class="small" onclick="exportSignups(${a.id})">导出名单</button></td></tr>`;
@@ -166,17 +176,13 @@ function activityList() {
 function renderActivity() {
   paint(searchBar('搜索活动名称…', `<button class="primary" onclick="toast('活动发布表单：接入 POST /api/activities')">+ 发布活动</button>`), activityList());
 }
-/* 发布/下架/重新发布三个动作；"已结束"由时间决定，不提供人工操作 */
 async function toggleActivity(id) {
   const a = DB.activities.find(x => x.id === id);
-  let next, msg, op;
-  if (a.status === '未开始') { next = '进行中'; msg = '活动已发布'; op = 'publish'; }
-  else if (a.status === '进行中') { next = '已下架'; msg = '活动已下架'; op = 'offline'; }
-  else if (a.status === '已下架') { next = '进行中'; msg = '活动已重新发布'; op = 'publish'; }
-  else return;
-  if (!await Bridge.mutate('activity.toggle', { id, op })) return;
-  a.status = next;
-  toast(msg); refreshList();
+  const act = activityAction(a);
+  if (!act) return;
+  if (!await Bridge.mutate('activity.toggle', { id, op: act.op })) return;
+  a.status = act.next; a.rawStatus = act.nextRaw;
+  toast(act.msg); refreshList();
 }
 async function exportSignups(id) {
   // 真实模式：走 Bearer + Blob 下载 CSV（Bridge.mutate 内部已触发下载，返回 false 跳过演示 toast）
@@ -235,6 +241,7 @@ function openModal(html) {
 function closeModal() {
   modalSession += 1;   // 使在途的 FileReader 回调失效
   pendingImage = null;
+  pendingFile = null;
   imageReading = false;
   q('#modal-root').innerHTML = '';
 }
@@ -247,6 +254,7 @@ function previewImage(input) {
   if (!f) return;
   if (!/^image\//.test(f.type)) { toast('请选择图片文件'); input.value = ''; return; }
   if (f.size > 2 * 1024 * 1024) { toast('图片不能超过 2MB'); input.value = ''; return; }
+  pendingFile = f;                       // 真实模式保存时用它上传；取消/关闭会清空
   const session = modalSession;          // 锁定发起读取的弹窗会话
   const seq = ++imageReadSeq;            // 本次读取的唯一序号；后一次选图会让前一次作废
   imageReading = true;
@@ -274,7 +282,7 @@ function previewImage(input) {
 }
 
 function openBannerModal(id = null) {
-  state.editId = id; pendingImage = null; imageReading = false;
+  state.editId = id; pendingImage = null; pendingFile = null; imageReading = false;
   const b = id ? DB.banners.find(x => x.id === id) : { title: '', image: '', link: '', sort: nextSort(DB.banners) };
   openModal(`<h3>${id ? '编辑' : '新增'} Banner</h3>
     <div class="form-row"><label>标题 *</label><input id="f-title" value="${esc(b.title)}"><div class="err" id="e-title"></div></div>
@@ -294,22 +302,35 @@ async function saveBanner() {
   if (!sortRaw || !Number.isInteger(sortNum) || sortNum < 1) { q('#e-sort').textContent = '排序必须为正整数'; ok = false; }
   if (!ok) return;
   const data = { title, link: q('#f-link').value.trim(), sort: sortNum };
-  if (!await Bridge.mutate('banner.save', { ...data, editId: state.editId })) return;
+  const real = Bridge.isReal();
+  const existing = state.editId ? DB.banners.find(x => x.id === state.editId) : null;
+  // v1.6：title/image 必填。真实模式新增必须选图；编辑可沿用已有 URL。
+  if (real && !pendingFile && !(existing && existing.image)) { toast('请上传图片（标题和图片必填）'); return; }
+  // payload 传引用：桥接层上传成功后把返回的 URL 写回 payload.savedImageUrl
+  const payload = { ...data, editId: state.editId, imageFile: pendingFile, imageUrl: existing ? existing.image : '' };
+  if (!await Bridge.mutate('banner.save', payload)) return;
   if (state.editId) {
     const b = DB.banners.find(x => x.id === state.editId);
     Object.assign(b, data);
-    if (pendingImage) b.image = pendingImage;
+    if (real && payload.savedImageUrl) b.image = payload.savedImageUrl;
+    else if (!real && pendingImage) b.image = pendingImage;
   } else {
-    DB.banners.push({ id: nextId(DB.banners), ...data, image: pendingImage || '', status: '上架' });
+    DB.banners.push({
+      id: nextId(DB.banners), ...data, status: '上架',
+      image: real ? (payload.savedImageUrl || '') : (pendingImage || '')
+    });
   }
   closeModal(); toast('保存成功'); refreshList();
 }
 
 function openBikeModal(id = null) {
   state.editId = id;
-  const b = id ? DB.bikes.find(x => x.id === id) : { name: '', price: '', cc: 150 };
+  const b = id ? DB.bikes.find(x => x.id === id) : { name: '', price: '', cc: 150, category: '' };
+  // 类别为自由文本（契约里是原文，如“巡航”），用 datalist 给出已有类别作提示，不限制输入
+  const known = [...new Set(DB.bikes.map(x => x.category).filter(Boolean))];
   openModal(`<h3>${id ? '编辑' : '新增'}车型</h3>
     <div class="form-row"><label>车型名称 *</label><input id="f-name" value="${esc(b.name)}"><div class="err" id="e-name"></div></div>
+    <div class="form-row"><label>类别 *（如 巡航）</label><input id="f-category" list="category-list" value="${esc(b.category || '')}" placeholder="巡航/街车/跑车…"><datalist id="category-list">${known.map(c => `<option value="${esc(c)}"></option>`).join('')}</datalist><div class="err" id="e-category"></div></div>
     <div class="form-row"><label>价格（元）*</label><input type="number" id="f-price" value="${b.price}"><div class="err" id="e-price"></div></div>
     <div class="form-row"><label>排量</label><select id="f-cc">${[150,250,300,400,500].map(v => `<option ${v == b.cc ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
     <div class="modal-actions"><button onclick="closeModal()">取消</button><button class="primary" onclick="saveBike()">保存</button></div>`);
@@ -317,11 +338,13 @@ function openBikeModal(id = null) {
 async function saveBike() {
   clearErrors();
   const name = q('#f-name').value.trim(), price = q('#f-price').value;
+  const category = q('#f-category').value.trim();
   let ok = true;
   if (!name) { q('#e-name').textContent = '车型名称不能为空'; ok = false; }
+  if (!category) { q('#e-category').textContent = '车型类别不能为空'; ok = false; }   // v1.6 必填
   if (!price || Number(price) <= 0) { q('#e-price').textContent = '价格必须大于 0'; ok = false; }
   if (!ok) return;
-  const data = { name, price: Number(price), cc: Number(q('#f-cc').value) };
+  const data = { name, category, price: Number(price), cc: Number(q('#f-cc').value) };
   if (!await Bridge.mutate('bike.save', { ...data, editId: state.editId })) return;
   if (state.editId) Object.assign(DB.bikes.find(x => x.id === state.editId), data);
   else DB.bikes.unshift({ id: nextId(DB.bikes), ...data, status: '上架' });

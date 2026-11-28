@@ -6,8 +6,10 @@
  *
  * 用法（联调当天）：
  *   浏览器打开  admin/index.html?base=http://<C的IP>:3000
- *   - 带 base 参数即自动进入真实模式，并把地址记到 localStorage，
- *     之后不带参数打开也沿用；演示模式用 ?real=0 关闭。
+ *   - base 只接受本机/回环/局域网私网地址（公网地址一律忽略），
+ *     避免恶意链接把 Bearer 令牌发到外部服务器。
+ *   - 带 base 参数进入真实模式并记到 localStorage；切换到不同地址时
+ *     会先清空登录态并弹确认，需重新登录；?real=0 回演示模式。
  *   - 真实模式首次打开会弹登录框，输入 D 的演示账号即可。
  *
  * 演示模式：所有 mutate() 直接返回 true，写操作仍走 app.js 的本地 DB，
@@ -35,17 +37,54 @@ const Bridge = (function () {
     } catch (e) { return false; }
   }
 
+  /* 切换后端地址前必须清掉旧会话：旧源的 Bearer 令牌不能带到新地址。
+   * 直接复用 Api.logout() 的清理语义（换新尝试标识 + 递增退出/会话版本 + 清记录）。 */
+  function dropSessionForSourceSwitch() {
+    if (typeof Api !== 'undefined' && Api.logout) Api.logout();
+  }
+
+  /* 地址变更的统一入口：校验白名单 + 跨源时清会话并要求确认。
+   * 返回 true 表示地址已应用；false 表示被拒绝（调用方不要进入真实模式）。 */
+  function useBase(raw, needConfirm) {
+    const base = String(raw || '').replace(/\/+$/, '');
+    if (!isTrustedApiBase(base)) {
+      tip('地址不在允许范围（仅本机/局域网），已拒绝切换');
+      return false;
+    }
+    const prev = localStorage.getItem(BASE_KEY) || '';
+    const crossSource = prev && prev !== base;   // 已有地址且与新地址不同 = 切换源
+    if (crossSource) {
+      if (needConfirm && typeof confirm === 'function') {
+        const ok = confirm('后端地址将从 ' + prev + ' 切换到 ' + base + '\n为保障安全会先退出登录，需要重新输入账号密码。是否继续？');
+        if (!ok) return false;
+      }
+      dropSessionForSourceSwitch();
+    }
+    API_CONFIG.baseURL = base;
+    localStorage.setItem(BASE_KEY, base);
+    return true;
+  }
+
   // 把 URL / localStorage 里的开关与地址应用到 api.js 的配置（API_CONFIG 是对象，属性可改）
   function applyConfig() {
     try {
       const p = new URLSearchParams(location.search);
-      const base = p.get('base') || localStorage.getItem(BASE_KEY);
-      if (base) {
-        API_CONFIG.baseURL = String(base).replace(/\/+$/, '');
-        localStorage.setItem(BASE_KEY, API_CONFIG.baseURL);
+      const raw = p.get('base');
+      if (raw) {
+        // 合法地址才进入真实模式；非法地址直接忽略，仍按 localStorage 里的旧配置/演示模式走
+        if (useBase(raw, true)) localStorage.setItem(REAL_KEY, '1');
+      } else {
+        // 没有 URL 参数时，沿用已保存的地址，但要复核白名单（防止旧值被改成外部地址）
+        const saved = localStorage.getItem(BASE_KEY);
+        if (saved) {
+          if (isTrustedApiBase(saved)) API_CONFIG.baseURL = String(saved).replace(/\/+$/, '');
+          else localStorage.removeItem(BASE_KEY);
+        }
       }
-      // 传了 base 就视为要联调，自动打开真实模式（省得再记一个参数）
-      if (p.has('base')) localStorage.setItem(REAL_KEY, '1');
+      if (p.has('base') && localStorage.getItem(REAL_KEY) !== '1') {
+        // base 参数存在但被拒绝：不要因为历史开关残留而误入真实模式
+        localStorage.setItem(REAL_KEY, '0');
+      }
       if (p.has('real')) localStorage.setItem(REAL_KEY, p.get('real') === '0' ? '0' : '1');
     } catch (e) { /* 非浏览器环境忽略 */ }
     API_CONFIG.USE_MOCK = !isReal();
@@ -53,11 +92,8 @@ const Bridge = (function () {
 
   function setReal(on, base) {
     try {
+      if (on && base && !useBase(base, true)) return;   // 非法地址不让切到真实模式
       localStorage.setItem(REAL_KEY, on ? '1' : '0');
-      if (base) {
-        API_CONFIG.baseURL = String(base).replace(/\/+$/, '');
-        localStorage.setItem(BASE_KEY, API_CONFIG.baseURL);
-      }
     } catch (e) {}
     API_CONFIG.USE_MOCK = !on;
   }
@@ -135,7 +171,19 @@ const Bridge = (function () {
           const m = /^\/(bike|activity)\/(\d+)$/.exec(payload.link || '');
           body.linkType = m ? m[1] : '';
           body.linkUrl = m ? m[2] : '';
-          // 图片：演示态的 dataURL 不回传；联调期如需上传，后续接 Api.upload
+          // v1.6：image 必填。新选的图先上传换相对 URL；编辑未选新图时沿用原 URL。
+          // 演示态的 dataURL 绝不回传给后端。
+          if (payload.imageFile) {
+            const up = await Api.upload(payload.imageFile);   // -> {url}
+            const url = up && up.url;
+            if (!url) throw new Error('上传未返回图片地址');
+            body.image = url;
+            payload.savedImageUrl = url;                      // 写回给页面更新本地 DB
+          } else if (payload.imageUrl) {
+            body.image = payload.imageUrl;
+            payload.savedImageUrl = payload.imageUrl;
+          }
+          if (!body.image) throw new Error('图片必填');
           if (payload.editId) await Api.banners.update(payload.editId, body);
           else await Api.banners.create(body);
           break;
@@ -144,8 +192,9 @@ const Bridge = (function () {
           await Api.banners.remove(payload.id);
           break;
         case 'bike.save': {
+          // v1.6：category 必填（旧名 series 已作废），表单与请求体都要带
           const body = {
-            name: payload.name, cc: payload.cc,
+            name: payload.name, category: payload.category, cc: payload.cc,
             price: Adapt.yuanToFen(payload.price)   // 表单元 -> 接口分
           };
           if (payload.editId) await Api.bikes.update(payload.editId, body);
@@ -212,7 +261,8 @@ const Bridge = (function () {
   }
 
   return {
-    isReal, applyConfig, setReal, load, loadAll, mutate,
+    isReal, applyConfig, setReal, useBase, isTrustedApiBase,
+    load, loadAll, mutate,
     showLogin, closeLogin, doLogin, logout,
     get baseURL() { return API_CONFIG.baseURL; }
   };

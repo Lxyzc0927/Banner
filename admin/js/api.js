@@ -49,6 +49,11 @@
  *   - 字段：banner 读管理端 linkType/linkUrl；admin 读 displayName；
  *          趋势日期字段 day、漏斗读 steps[].sessions、模块读 moduleLabel
  *   - 权限点数组 data.admin.permissions 随会话保存，Perm 优先按权限点、回退角色
+ *
+ * 复审修复（组长 c48f1fa 复审意见）：
+ *   - [P1] 新增 isTrustedApiBase() 主机白名单：只允许本机/回环/私网 IP。
+ *          request() 对非白名单地址直接拒绝，杜绝 base 参数把 Bearer 令牌/账号密码
+ *          发送到任意外部服务器；Bridge 切换地址时复用同一校验并先清空登录态
  * ============================================================ */
 
 /* ---------- 全局配置：联调时只改这里 ---------- */
@@ -62,6 +67,32 @@ const API_CONFIG = {
   successCode: 0,                                  // code === 0 视为成功
   timeout: 10000
 };
+
+/* ---------- 主机白名单：防止 base 参数把令牌发到任意服务器 ----------
+ * 联调地址只会是本机/回环/局域网私网 IP。公网域名或公网 IP 一律拒绝，
+ * 这样即便有人构造 admin/index.html?base=https://evil.example 诱导点击，
+ * URL 里的地址也不会被用来发带 Authorization 的请求。
+ */
+function isTrustedApiBase(raw) {
+  try {
+    const s = String(raw || '').trim();
+    if (!s) return false;
+    // 仅允许 http/https，且必须带主机
+    const m = /^(https?):\/\/([^\/:?#]+)(?::\d+)?(?:[\/?#]|$)/i.exec(s);
+    if (!m) return false;
+    const host = m[2].toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1' || host === '::1' || host === '[::1]') return true;
+    // IPv4 私网段：10/8、172.16/12、192.168/16
+    const ip = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(host);
+    if (ip) {
+      const a = Number(ip[1]), b = Number(ip[2]);
+      if (a === 10) return true;
+      if (a === 172 && b >= 16 && b <= 31) return true;
+      if (a === 192 && b === 168) return true;
+    }
+    return false;
+  } catch (e) { return false; }
+}
 
 /* ---------- 路径常量：与 API.md v1.6 一一对应 ---------- */
 const API = {
@@ -182,6 +213,11 @@ async function request(path, opts = {}) {
     throw new Error('MOCK_MODE');
   }
   const { method = 'GET', body, query, silent = false, responseType = 'json' } = opts;
+  // 令牌/账号密码只发给可信地址：baseURL 非本机/私网时直接拒绝，绝不发请求
+  if (!isTrustedApiBase(API_CONFIG.baseURL)) {
+    if (!silent) toast('后端地址不在允许范围（仅本机/局域网），已阻止请求');
+    throw new Error('UNTRUSTED_BASE');
+  }
   let url = API_CONFIG.baseURL + path;
   if (query && Object.keys(query).length) {
     url += '?' + Object.keys(query)
