@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS bike (
   tags       TEXT,
   price      INTEGER NOT NULL CHECK (price >= 0),
   specs      TEXT,
-  desc       TEXT,
+  intro       TEXT,
   cover      TEXT,
   status     INTEGER NOT NULL DEFAULT 1 CHECK (status IN (0, 1)),
   sort       INTEGER NOT NULL DEFAULT 0,
