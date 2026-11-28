@@ -51,7 +51,10 @@ Page({
       .map(m => ({ role: m.role, content: m.content }))
 
     api.chat({ sessionId: this.sessionId, messages: history }).then(res => {
-      const bikes = (res.bikes || []).map(b => Object.assign({}, b, { priceText: format.priceFromFen(b.price), cc: b.cc || format.ccOfName(b.name) }))
+      const bikes = (res.bikes || []).map(b => Object.assign({}, b, {
+        priceText: format.priceFromFen(b.price),
+        cc: format.displacement(b.cc) || format.ccOfName(b.name)
+      }))
       this.replacePending(pending.id, msg('assistant', res.reply, { bikes }))
     }, () => {
       this.replacePending(pending.id, msg('assistant', '网络开小差了，请稍后重试。', { failed: true, retry: content }))

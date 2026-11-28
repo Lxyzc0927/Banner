@@ -6,7 +6,7 @@
       </view>
       <view wx:if="{{item.bikes.length}}" class="recs">
         <view wx:for="{{item.bikes}}" wx:for-item="b" wx:key="id" class="rec" hover-class="pressed" data-id="{{b.id}}" bindtap="openBike">
-          <plate wx:if="{{b.cc}}" cc="{{b.cc}}" size="m" />
+          <plate wx:if="{{b.cc}}" cc="{{b.cc || 0}}" size="m" />
           <text class="rec-name">{{b.name}}</text>
           <text class="rec-price"><text class="yen">¥</text><text class="num">{{b.priceText}}</text></text>
           <image class="icon-s" src="/assets/icons/caret-right-bold-5a5a57.svg" aria-hidden="true" />

@@ -1,6 +1,6 @@
 <view class="row" hover-class="pressed" hover-stay-time="80" bindtap="onTap">
   <image wx:if="{{bike.cover}}" class="cover" src="{{bike.cover}}" mode="aspectFill" lazy-load />
-  <plate wx:else cc="{{bike.cc}}" />
+  <plate wx:else cc="{{plateCc || 0}}" />
   <view class="info">
     <view class="name">{{bike.name}}</view>
     <view class="meta"><text>{{bike.category}}</text><text class="dot">{{tierLabel}}</text></view>
